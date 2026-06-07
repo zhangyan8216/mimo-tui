@@ -41,6 +41,7 @@ export const shellTool: Tool = {
 
       let stdout = '';
       let stderr = '';
+      let settled = false;
 
       proc.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
@@ -59,11 +60,15 @@ export const shellTool: Tool = {
       });
 
       const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
         proc.kill();
         reject(new Error(`Command timed out after ${timeout}ms`));
       }, timeout);
 
       proc.on('close', (code) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         const parts: string[] = [];
         if (stdout) parts.push(stdout.trimEnd());
@@ -73,6 +78,8 @@ export const shellTool: Tool = {
       });
 
       proc.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         reject(new Error(`Failed to execute command: ${err.message}`));
       });

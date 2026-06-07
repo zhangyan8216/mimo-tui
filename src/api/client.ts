@@ -369,6 +369,7 @@ export class MiMoClient {
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
 
           const data = trimmed.slice(6);
+          if (data === '[DONE]') break;  // Normal stream termination
           try {
             const event = JSON.parse(data) as AnthropicStreamEvent;
             yield event;

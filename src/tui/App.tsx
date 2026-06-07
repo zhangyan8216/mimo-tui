@@ -155,6 +155,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const subAgentManager = useRef(new SubAgentManager(3));
   const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);
   const autoCommit = useRef(false);
+  const isAutoCommitting = useRef(false);
   const autoTest = useRef(false);
   const [fileChanges, setFileChanges] = useState<string>('');
 
@@ -1951,6 +1952,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     }, 33);
 
     try {
+      const messagesBeforeLoop = messagesRef.current.length;
       const result = await loop.run(modeRef.current, {
         onToken: (token) => {
           streamBufferRef.current.content += token;
@@ -2042,13 +2044,16 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       notifyComplete();
 
       // 自动提交：对话完成后自动执行 git commit
-      if (autoCommit.current) {
-        setTimeout(() => handleSubmit('请用 shell 执行: git add -A && git commit -m "auto: ' + processedText.slice(0, 50).replace(/"/g, '\\"') + '"'), 500);
+      if (autoCommit.current && !isAutoCommitting.current) {
+        isAutoCommitting.current = true;
+        setTimeout(() => {
+          handleSubmit('请用 shell 执行: git add -A && git commit -m "auto: ' + processedText.slice(0, 50).replace(/"/g, '\\"') + '"');
+          setTimeout(() => { isAutoCommitting.current = false; }, 2000);
+        }, 500);
       }
 
       // Persist assistant/tool messages to session store (skip already-persisted user message)
-      const prevLen = messagesRef.current.length;
-      const newMessages = displayMessages.slice(prevLen);
+      const newMessages = displayMessages.slice(messagesBeforeLoop);
       for (const msg of newMessages) {
         sessionManager.current.addMessage(msg);
       }
@@ -2091,6 +2096,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       }
     } catch (error) {
       if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
+      if (!agentLoop.current) return; // Was aborted, don't update state
       setIsStreaming(false);
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -2104,6 +2110,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     if (key.ctrl && input === 'c') {
       if (isStreaming) {
         agentLoop.current?.abort();
+        agentLoop.current = null;
         if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
         setIsStreaming(false);
         setIsThinking(false);

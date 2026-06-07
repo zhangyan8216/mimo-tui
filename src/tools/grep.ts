@@ -111,7 +111,9 @@ function builtinSearch(
 
     for (const entry of entries) {
       if (results.length >= limit) break;
-      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist') continue;
+      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist' ||
+          entry.name === 'build' || entry.name === 'coverage' || entry.name === '__pycache__' ||
+          entry.name === '.next' || entry.name === 'vendor') continue;
 
       const fullPath = path.join(dir, entry.name);
 
@@ -123,6 +125,8 @@ function builtinSearch(
         }
 
         try {
+          const stat = fs.statSync(fullPath);
+          if (stat.size > 1024 * 1024) continue; // Skip files > 1MB
           const content = fs.readFileSync(fullPath, 'utf-8');
           const lines = content.split('\n');
           for (let i = 0; i < lines.length; i++) {

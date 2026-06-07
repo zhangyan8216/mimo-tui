@@ -78,6 +78,7 @@ export async function compactContext(
   messages: Message[],
   client: MiMoClient,
   onProgress?: (msg: string) => void,
+  model?: string,
 ): Promise<{ compacted: Message[]; savedTokens: number }> {
   if (messages.length <= KEEP_RECENT) {
     return { compacted: messages, savedTokens: 0 };
@@ -121,7 +122,7 @@ export async function compactContext(
     const result = await client.chat(summaryMessages, undefined, {
       maxTokens: 1200,
       reasoningEffort: 'low',
-      model: 'mimo-v2.5-flash',  // 摘要用 Flash，省 token
+      model: model || undefined,  // If not provided, use client's default model
     });
 
     const summary = result.message.content || '对话摘要生成失败';
