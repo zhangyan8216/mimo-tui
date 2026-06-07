@@ -3,6 +3,7 @@
 
 import type { Config } from '../config.js';
 import type { ProjectContext } from './context.js';
+import { analyzeTask } from './task-planner.js';
 
 interface PromptBuilderInput {
   projectCtx: ProjectContext | null;
@@ -11,6 +12,7 @@ interface PromptBuilderInput {
   messageCount: number;
   toolCallCount: number;
   recentErrors: string[];
+  userMessage?: string;  // 当前用户消息，用于任务分析
 }
 
 /**
@@ -29,6 +31,14 @@ export function buildSystemPrompt(input: PromptBuilderInput): string {
 2. 不要编造不存在的代码。不确定就先读取或搜索
 3. 完成后用 shell 编译或 test_runner 测试验证
 4. 简洁回复。说完做什么，直接调工具`);
+
+  // ===== 任务分析（根据用户消息自动注入） =====
+  if (input.userMessage) {
+    const taskAnalysis = analyzeTask(input.userMessage);
+    if (taskAnalysis) {
+      sections.push(taskAnalysis);
+    }
+  }
 
   // ===== 项目上下文 =====
   if (projectCtx) {

@@ -1898,6 +1898,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       messageCount: historyMessages.length,
       toolCallCount,
       recentErrors,
+      userMessage: processedText,
     });
 
     const systemContent = [
