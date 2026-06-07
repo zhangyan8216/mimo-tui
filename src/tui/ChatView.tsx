@@ -1,4 +1,4 @@
-// src/tui/ChatView.tsx - Main chat area with card stream
+// src/tui/ChatView.tsx - 主聊天区域
 
 import React from 'react';
 import { Text, Box } from 'ink';
@@ -20,51 +20,40 @@ interface ChatViewProps {
 export const ChatView: React.FC<ChatViewProps> = ({
   messages, theme, streamingContent, streamingThinking, streamingToolCalls, isStreaming, isThinking, toolResults,
 }) => {
+  // 欢迎界面
   if (messages.length === 0 && !isStreaming) {
     return (
       <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
-        {/* ASCII art logo */}
         <Box marginBottom={1}>
-          <Text color={theme.tone.brand} bold>
-            {'  ╔═══════════════════════════════════════════╗'}
-          </Text>
+          <Text color={theme.tone.brand} bold>  🐱  Mimo TUI  </Text>
+          <Text color={theme.fg.sub}>v1.0.0</Text>
         </Box>
-        <Box>
-          <Text color={theme.tone.brand} bold>
-            {'  ║       🐱  欢迎使用 Mimo TUI  🐱        ║'}
-          </Text>
-        </Box>
-        <Box marginBottom={1}>
-          <Text color={theme.tone.brand} bold>
-            {'  ╚═══════════════════════════════════════════╝'}
-          </Text>
-        </Box>
-        <Box marginBottom={1}>
-          <Text color={theme.fg.sub}>基于小米 MiMo 的终端 AI 编程助手</Text>
+        <Box marginBottom={2}>
+          <Text color={theme.fg.sub}>终端 AI 编程助手</Text>
         </Box>
 
-        {/* Quick start hints */}
-        <Box flexDirection="column" paddingLeft={4} gap={0}>
-          <Text color={theme.fg.meta}>
-            {'  '}<Text color={theme.tone.accent} bold>输入消息</Text>
-            <Text color={theme.fg.meta}> 开始对话</Text>
-          </Text>
-          <Text color={theme.fg.meta}>
-            {'  '}<Text color={theme.tone.brand}>Ctrl+K</Text>
-            <Text color={theme.fg.meta}> 命令面板</Text>
-          </Text>
-          <Text color={theme.fg.meta}>
-            {'  '}<Text color={theme.tone.brand}>Ctrl+R</Text>
-            <Text color={theme.fg.meta}> 会话列表</Text>
-          </Text>
-          <Text color={theme.fg.meta}>
-            {'  '}<Text color={theme.tone.brand}>Ctrl+N</Text>
-            <Text color={theme.fg.meta}> 新建会话</Text>
-          </Text>
-          <Text color={theme.fg.meta}>
-            {'  '}<Text color={theme.tone.brand}>?</Text>
-            <Text color={theme.fg.meta}> 帮助</Text>
-          </Text>
+        <Box flexDirection="column" gap={1}>
+          <Box>
+            <Text color={theme.fg.faint}>  </Text>
+            <Text color={theme.tone.accent} bold>输入消息</Text>
+            <Text color={theme.fg.sub}>  开始对话</Text>
+          </Box>
+          <Box>
+            <Text color={theme.fg.faint}>  </Text>
+            <Text color={theme.tone.brand}>Ctrl+K</Text>
+            <Text color={theme.fg.sub}>  命令面板</Text>
+            <Text color={theme.fg.faint}>    </Text>
+            <Text color={theme.tone.brand}>Ctrl+R</Text>
+            <Text color={theme.fg.sub}>  历史会话</Text>
+          </Box>
+          <Box>
+            <Text color={theme.fg.faint}>  </Text>
+            <Text color={theme.tone.brand}>?</Text>
+            <Text color={theme.fg.sub}>        帮助</Text>
+            <Text color={theme.fg.faint}>    </Text>
+            <Text color={theme.tone.brand}>Tab</Text>
+            <Text color={theme.fg.sub}>       命令补全</Text>
+          </Box>
         </Box>
       </Box>
     );
@@ -81,43 +70,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
         />
       ))}
 
-      {/* Streaming message */}
+      {/* 流式输出 */}
       {isStreaming && (
-        <Box flexDirection="column" marginY={1}>
-          <Box>
-            <Text color={theme.card.assistant.color} bold>
-              {theme.card.assistant.glyph} MiMo
-            </Text>
-            {!streamingContent && !streamingThinking && (!streamingToolCalls || streamingToolCalls.size === 0) && (
-              <Text color={theme.tone.brand}> 思考中...</Text>
-            )}
-          </Box>
-          {/* Streaming tool calls with partial arguments */}
+        <Box flexDirection="column" marginY={0} paddingY={1}>
+          {/* 工具调用实时显示 */}
           {streamingToolCalls && streamingToolCalls.size > 0 && (
-            <Box flexDirection="column" paddingLeft={1}>
+            <Box flexDirection="column" paddingLeft={1} marginBottom={1}>
               {Array.from(streamingToolCalls.entries()).map(([index, tc]) => {
-                const icon = tc.name.startsWith('mcp_') ? '🔌' : '⚡';
-                // Show partial args, truncate for display
-                const argsPreview = tc.args.length > 60
-                  ? tc.args.slice(0, 60) + '...'
-                  : tc.args;
+                const argsPreview = tc.args.length > 50 ? tc.args.slice(0, 50) + '…' : tc.args;
                 return (
                   <Box key={index}>
-                    <Text color={theme.tone.brand}>
-                      {icon}{' '}
-                    </Text>
-                    <Text color={theme.fg.strong} bold>
-                      {tc.name || '...'}{' '}
-                    </Text>
-                    <Text dimColor color={theme.fg.meta}>
-                      {argsPreview || '{}'}
-                    </Text>
+                    <Text color={theme.tone.brand}>  ⚡ </Text>
+                    <Text color={theme.fg.strong} bold>{tc.name || '…'} </Text>
+                    <Text color={theme.fg.faint}>{argsPreview || '{}'}</Text>
                     <Text color={theme.tone.brand} bold> ▊</Text>
                   </Box>
                 );
               })}
             </Box>
           )}
+
+          {/* MiMo 回复 */}
+          <Box paddingLeft={1}>
+            <Text color={theme.card.assistant.color} bold>
+              {theme.card.assistant.glyph} MiMo
+            </Text>
+            {!streamingContent && !streamingThinking && (!streamingToolCalls || streamingToolCalls.size === 0) && (
+              <Text color={theme.fg.faint}> 思考中…</Text>
+            )}
+          </Box>
+
           <MessageBubble
             message={{ role: 'assistant', content: streamingContent || null }}
             theme={theme}

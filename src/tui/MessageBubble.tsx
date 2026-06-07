@@ -1,4 +1,4 @@
-// src/tui/MessageBubble.tsx - Card-based message rendering (DeepSeek TUI style)
+// src/tui/MessageBubble.tsx - 消息气泡
 
 import React from 'react';
 import { Text, Box } from 'ink';
@@ -7,25 +7,6 @@ import type { Message } from '../api/types.js';
 import { Markdown } from './Markdown.js';
 import { ThinkingBlock } from './ThinkingBlock.js';
 import { ToolCallView } from './ToolCallView.js';
-
-interface StreamingToolCallProps {
-  name: string;
-  args: string;
-  theme: Theme;
-}
-
-export const StreamingToolCall: React.FC<StreamingToolCallProps> = ({ name, args, theme }) => {
-  const icon = name.startsWith('mcp_') ? '🔌' : '⚡';
-  const argsPreview = args.length > 80 ? args.slice(0, 80) + '...' : args;
-  return (
-    <Box>
-      <Text color={theme.tone.brand}>{icon}{' '}</Text>
-      <Text color={theme.fg.strong} bold>{name || '...'}{' '}</Text>
-      <Text dimColor color={theme.fg.meta}>{argsPreview || '{}'}</Text>
-      <Text color={theme.tone.brand} bold>{' '}▊</Text>
-    </Box>
-  );
-};
 
 interface MessageBubbleProps {
   message: Message;
@@ -41,44 +22,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
-  const isTool = message.role === 'tool';
-  const isSystem = message.role === 'system';
-
-  if (isTool || isSystem) return null;
-
-  const card = isUser ? theme.card.user : theme.card.assistant;
+  if (message.role === 'tool' || message.role === 'system') return null;
 
   return (
-    <Box flexDirection="column" marginY={1}>
-      {/* Role header with card glyph */}
-      <Box>
-        <Text color={card.color} bold>
-          {card.glyph} {isUser ? '你' : 'MiMo'}
-        </Text>
+    <Box flexDirection="column" marginY={0} paddingY={1}>
+      {/* 角色标签 */}
+      <Box marginBottom={0}>
+        {isUser ? (
+          <Text color={theme.tone.accent} bold>  {'>'} 你</Text>
+        ) : (
+          <Text color={theme.card.assistant.color} bold>  {theme.card.assistant.glyph} MiMo</Text>
+        )}
         {isStreaming && (
-          <Text color={theme.tone.brand}> ▸ 传输中</Text>
+          <Text color={theme.fg.faint}> · 生成中</Text>
         )}
       </Box>
 
-      {/* Thinking block */}
+      {/* 思考块 */}
       {(thinking || isThinking) && (
-        <ThinkingBlock
-          content={thinking || ''}
-          theme={theme}
-          streaming={isThinking}
-        />
+        <ThinkingBlock content={thinking || ''} theme={theme} streaming={isThinking} />
       )}
 
-      {/* Tool calls */}
+      {/* 工具调用 */}
       {isAssistant && message.tool_calls && message.tool_calls.length > 0 && (
-        <Box flexDirection="column" paddingLeft={1}>
+        <Box flexDirection="column" paddingLeft={2} marginBottom={0}>
           {message.tool_calls.map((tc, i) => {
             const toolResult = toolResults?.get(tc.id);
             let args: Record<string, unknown> = {};
-            try {
-              args = JSON.parse(tc.function.arguments || '{}');
-            } catch { /* empty */ }
-
+            try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* skip */ }
             return (
               <ToolCallView
                 key={tc.id || i}
@@ -94,9 +65,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </Box>
       )}
 
-      {/* Content */}
+      {/* 消息内容 */}
       {message.content && (
-        <Box paddingLeft={1} flexDirection="column">
+        <Box paddingLeft={2} flexDirection="column">
           {isUser ? (
             <Text color={theme.fg.body}>{message.content}</Text>
           ) : (
@@ -105,9 +76,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         </Box>
       )}
 
-      {/* Streaming cursor */}
+      {/* 流式光标 */}
       {isStreaming && !message.tool_calls?.length && !isThinking && (
-        <Box paddingLeft={1}>
+        <Box paddingLeft={2}>
           <Text color={theme.tone.brand} bold>▊</Text>
         </Box>
       )}

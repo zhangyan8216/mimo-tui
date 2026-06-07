@@ -1,4 +1,4 @@
-// src/tui/StatusBar.tsx - Rich status bar with chip/pill rendering (DeepSeek TUI style)
+// src/tui/StatusBar.tsx - 状态栏
 
 import React, { useState, useEffect } from 'react';
 import { Text, Box } from 'ink';
@@ -19,103 +19,64 @@ interface StatusBarProps {
   maxIterations?: number;
 }
 
-const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   mode, model, usage, theme, streaming, branch, gitDirty, iteration, maxIterations,
 }) => {
   const [spinnerIdx, setSpinnerIdx] = useState(0);
 
-  // Spinner animation when streaming
   useEffect(() => {
     if (!streaming) return;
-    const timer = setInterval(() => {
-      setSpinnerIdx(prev => (prev + 1) % SPINNER_FRAMES.length);
-    }, 80);
+    const timer = setInterval(() => setSpinnerIdx(prev => (prev + 1) % SPINNER.length), 80);
     return () => clearInterval(timer);
   }, [streaming]);
 
   const modeConfig = getModeConfig(mode);
   const modeColor = theme.pill.mode[mode] || theme.tone.brand;
 
-  // Context usage bar
+  // 上下文进度条
   const contextPct = usage.totalTokens > 0 ? Math.min(usage.totalTokens / 128000, 1) : 0;
-  const barWidth = 10;
+  const barWidth = 8;
   const filled = Math.round(contextPct * barWidth);
   const contextBar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);
   const contextColor = contextPct > 0.8 ? theme.tone.err : contextPct > 0.5 ? theme.tone.warn : theme.tone.ok;
 
   return (
-    <Box
-      flexDirection="row"
-      justifyContent="space-between"
-      borderStyle="single"
-      borderColor={theme.fg.faint}
-      paddingX={1}
-    >
-      {/* Left: Mode + Model + Branch */}
+    <Box flexDirection="row" justifyContent="space-between" borderStyle="single" borderColor={theme.fg.faint} paddingX={1}>
+      {/* 左侧 */}
       <Box flexDirection="row" gap={1}>
-        {/* Streaming spinner */}
-        {streaming && (
-          <Text color={theme.tone.brand}>{SPINNER_FRAMES[spinnerIdx]}</Text>
-        )}
-
-        {/* Mode chip */}
-        <Text>
-          <Text color={modeColor} bold>{modeConfig.icon} {modeConfig.label}</Text>
-        </Text>
-
-        {/* Separator */}
+        {streaming && <Text color={theme.tone.brand}>{SPINNER[spinnerIdx]}</Text>}
+        <Text color={modeColor} bold>{modeConfig.icon} {modeConfig.label}</Text>
         <Text color={theme.fg.faint}>│</Text>
-
-        {/* Model pill */}
-        <Text color={theme.pill.model}>{model}</Text>
-
-        {/* Git branch */}
+        <Text color={theme.fg.sub}>{model}</Text>
         {branch && (
           <>
             <Text color={theme.fg.faint}>│</Text>
-            <Text color={gitDirty ? theme.tone.warn : theme.pill.branch}>
-              ⎇ {branch}{gitDirty ? ' ✱' : ''}
-            </Text>
+            <Text color={gitDirty ? theme.tone.warn : theme.fg.sub}>⎇ {branch}{gitDirty ? ' ✱' : ''}</Text>
           </>
         )}
       </Box>
 
-      {/* Right: Tokens + Cache + Cost + Context bar */}
+      {/* 右侧 */}
       <Box flexDirection="row" gap={1}>
-        {/* Iteration counter */}
-        {iteration !== undefined && iteration > 0 && maxIterations !== undefined && (
+        {iteration !== undefined && iteration > 0 && (
           <>
-            <Text color={theme.fg.meta}>迭代 {iteration}/{maxIterations}</Text>
+            <Text color={theme.fg.faint}>{iteration}/{maxIterations}</Text>
             <Text color={theme.fg.faint}>│</Text>
           </>
         )}
-
-        {/* Token count */}
-        <Text color={theme.fg.sub}>
-          {formatTokenCount(usage.totalTokens)} 令牌
-        </Text>
-
-        {/* Cache rate pill */}
+        <Text color={theme.fg.faint}>{formatTokenCount(usage.totalTokens)}</Text>
         {usage.cacheHitTokens > 0 && (
           <>
             <Text color={theme.fg.faint}>│</Text>
-            <Text color={theme.pill.cache}>缓存 {formatCacheRate(usage)}</Text>
+            <Text color={theme.fg.sub}>缓存 {formatCacheRate(usage)}</Text>
           </>
         )}
-
-        {/* Cost pill */}
         {usage.totalTokens > 0 && (
           <>
             <Text color={theme.fg.faint}>│</Text>
-            <Text color={theme.pill.cost}>{formatCost(usage)}</Text>
-          </>
-        )}
-
-        {/* Context usage bar */}
-        {usage.totalTokens > 0 && (
-          <>
+            <Text color={theme.fg.sub}>{formatCost(usage)}</Text>
             <Text color={theme.fg.faint}>│</Text>
             <Text color={contextColor}>{contextBar}</Text>
           </>
