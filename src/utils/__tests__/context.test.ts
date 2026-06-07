@@ -3,11 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { buildProjectContext, extractRelevantContext } from '../context.js';
+import { buildProjectContext, extractRelevantContext, clearContextCache } from '../context.js';
 
 const tmpDir = path.join(os.tmpdir(), 'mimo-test-context');
 
 beforeEach(() => {
+  clearContextCache();
   fs.mkdirSync(tmpDir, { recursive: true });
 });
 

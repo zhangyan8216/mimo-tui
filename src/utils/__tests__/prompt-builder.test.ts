@@ -1,6 +1,6 @@
 // src/utils/__tests__/prompt-builder.test.ts
-import { describe, it, expect } from 'vitest';
-import { buildSystemPrompt, extractRecentErrors } from '../prompt-builder.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { buildSystemPrompt, extractRecentErrors, clearPromptCache } from '../prompt-builder.js';
 import type { Config } from '../../config.js';
 import type { ProjectContext } from '../context.js';
 
@@ -38,6 +38,10 @@ function makeProjectCtx(overrides: Partial<ProjectContext> = {}): ProjectContext
     ...overrides,
   };
 }
+
+beforeEach(() => {
+  clearPromptCache();
+});
 
 function makeInput(overrides: Record<string, unknown> = {}) {
   return {

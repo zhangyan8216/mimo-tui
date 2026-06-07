@@ -116,7 +116,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
 
       let completed = 0;
       for (const [i, task] of tasks.entries()) {
-        subAgentManager.current.spawn(`parallel-${i+1}`, task, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
+        subAgentManager.current!.spawn(`parallel-${i+1}`, task, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
           completed++;
           const status = result.status === 'completed' ? '✅' : '❌';
           setMessages(prev => [...prev, { role: 'assistant', content: `${status} 任务 ${i+1}/${tasks.length}: ${task.slice(0, 30)}...\n${(result.result || result.error || '').slice(0, 300)}` }]);
@@ -151,7 +151,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
 
         setMessages(prev => [...prev, { role: 'assistant', content: `🔗 正在执行阶段 ${stageIndex + 1}/${stages.length}: ${stages[stageIndex].slice(0, 50)}...` }]);
 
-        subAgentManager.current.spawn(
+        subAgentManager.current!.spawn(
           `pipeline-${stageIndex + 1}`,
           stagePrompt,
           client,
@@ -185,7 +185,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
       const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
       const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
       setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在探索: ${topic}` }]);
-      subAgentManager.current.spawn(`explore-${topic.slice(0, 20)}`, `请用 codebase 和 read_file 工具探索项目，回答以下问题: ${topic}. 只读取和分析，不要修改任何文件。`, client, toolRegistry.current, toolCtx, 'plan', (result) => {
+      subAgentManager.current!.spawn(`explore-${topic.slice(0, 20)}`, `请用 codebase 和 read_file 工具探索项目，回答以下问题: ${topic}. 只读取和分析，不要修改任何文件。`, client, toolRegistry.current, toolCtx, 'plan', (result) => {
         const status = result.status === 'completed' ? '✅' : '❌';
         setMessages(prev => [...prev, { role: 'assistant', content: `${status} 探索完成: ${topic}\n${(result.result || result.error || '').slice(0, 500)}` }]);
       });
@@ -198,7 +198,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
       const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
       const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
       setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在审查: ${target}` }]);
-      subAgentManager.current.spawn(`review-${target.slice(0, 20)}`, `请审查 ${target} 的代码质量。检查: 1) 潜在的 bug 2) 性能问题 3) 安全隐患 4) 代码风格 5) 可改进建议。给出具体的问题描述和修复建议。`, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
+      subAgentManager.current!.spawn(`review-${target.slice(0, 20)}`, `请审查 ${target} 的代码质量。检查: 1) 潜在的 bug 2) 性能问题 3) 安全隐患 4) 代码风格 5) 可改进建议。给出具体的问题描述和修复建议。`, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
         const status = result.status === 'completed' ? '✅' : '❌';
         setMessages(prev => [...prev, { role: 'assistant', content: `${status} 代码审查完成: ${target}\n${(result.result || result.error || '').slice(0, 500)}` }]);
       });
@@ -216,7 +216,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
       const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
       const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
       setMessages(prev => [...prev, { role: 'assistant', content: `🔀 后台任务 **${taskName}** 已启动` }]);
-      subAgentManager.current.spawn(taskName, taskPrompt, client, toolRegistry.current, toolCtx, modeRef.current, (task) => {
+      subAgentManager.current!.spawn(taskName, taskPrompt, client, toolRegistry.current, toolCtx, modeRef.current, (task) => {
         const status = task.status === 'completed' ? '✅' : '❌';
         const content = task.result || task.error || '无结果';
         setMessages(prev => [...prev, {
@@ -228,7 +228,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
     }
 
     case 'status': {
-      const allTasks = subAgentManager.current.getAllTasks();
+      const allTasks = subAgentManager.current!.getAllTasks();
       if (allTasks.length === 0) {
         setMessages(prev => [...prev, { role: 'assistant', content: '📊 没有后台任务' }]);
         break;
@@ -237,7 +237,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
         const icon = t.status === 'running' ? '🔄' : t.status === 'completed' ? '✅' : '❌';
         return `${icon} ${t.name} [${t.status}]`;
       });
-      setMessages(prev => [...prev, { role: 'assistant', content: `📊 **后台任务** (${subAgentManager.current.runningCount} 运行中)\n${lines.join('\n')}` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `📊 **后台任务** (${subAgentManager.current!.runningCount} 运行中)\n${lines.join('\n')}` }]);
       break;
     }
 
@@ -254,7 +254,7 @@ export function handleAICommand(cmd: string, cmdArgs: string[], ctx: CommandCont
         stopped.push('当前 AI 对话');
       }
 
-      fileWatcher.current.stop();
+      fileWatcher.current!.stop();
       stopped.push('文件监控');
 
       setIsStreaming(false);

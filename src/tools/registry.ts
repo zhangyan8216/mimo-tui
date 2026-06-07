@@ -19,20 +19,25 @@ export interface Tool {
 
 export class ToolRegistry {
   private tools: Map<string, Tool> = new Map();
+  private definitionsCache: ToolDefinition[] | null = null;
 
   register(tool: Tool): void {
     this.tools.set(tool.name, tool);
+    this.definitionsCache = null; // invalidate cache
   }
 
   getDefinitions(): ToolDefinition[] {
-    return Array.from(this.tools.values()).map(tool => ({
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }));
+    if (!this.definitionsCache) {
+      this.definitionsCache = Array.from(this.tools.values()).map(tool => ({
+        type: 'function' as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+    }
+    return this.definitionsCache;
   }
 
   getTool(name: string): Tool | undefined {

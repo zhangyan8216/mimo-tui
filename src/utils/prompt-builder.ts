@@ -15,12 +15,31 @@ interface PromptBuilderInput {
   userMessage?: string;  // 当前用户消息，用于任务分析
 }
 
+let cachedPrompt: string | null = null;
+let cachedPromptKey = '';
+
+export function clearPromptCache(): void {
+  cachedPrompt = null;
+  cachedPromptKey = '';
+}
+
 /**
  * 构建动态系统提示词
  * 根据项目类型和对话状态实时调整，让 MiMo 始终处于最佳状态
  */
 export function buildSystemPrompt(input: PromptBuilderInput): string {
   const { projectCtx, config, mode, messageCount, toolCallCount, recentErrors } = input;
+
+  // Cache: rebuild prompt only when significant state changes
+  const key = JSON.stringify({
+    mode: input.mode,
+    msgBucket: Math.floor(messageCount / 5),
+    errorCount: recentErrors.length,
+  });
+  if (cachedPrompt && cachedPromptKey === key && !input.userMessage) {
+    return cachedPrompt;
+  }
+
   const sections: string[] = [];
 
   // ===== 核心身份 =====
@@ -114,7 +133,10 @@ ${recentErrors.map(e => `- ${e}`).join('\n')}
 - 文件路径用 path:line 格式
 - 不要输出大段解释，直接行动`);
 
-  return sections.join('\n\n');
+  const result = sections.join('\n\n');
+  cachedPrompt = result;
+  cachedPromptKey = key;
+  return result;
 }
 
 /**

@@ -10,6 +10,11 @@ import { AstParser, type ParsedFile } from '../analysis/ast-parser.js';
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.cache', '.mimo']);
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs']);
 
+let cachedContext: ProjectContext | null = null;
+let cachedContextCwd = '';
+let cacheTime = 0;
+const CACHE_TTL = 30000; // 30 seconds
+
 export interface ProjectContext {
   /** 项目根目录的文件树（精简版，只到 2 层深度） */
   fileTree: string;
@@ -26,7 +31,18 @@ export interface ProjectContext {
 /**
  * 构建项目上下文（启动时调用一次，缓存结果）
  */
+export function clearContextCache(): void {
+  cachedContext = null;
+  cachedContextCwd = '';
+  cacheTime = 0;
+}
+
 export function buildProjectContext(cwd: string): ProjectContext {
+  const now = Date.now();
+  if (cachedContext && cachedContextCwd === cwd && now - cacheTime < CACHE_TTL) {
+    return cachedContext;
+  }
+
   const ctx: ProjectContext = {
     fileTree: buildFileTree(cwd),
     packageInfo: extractPackageInfo(cwd),
@@ -43,6 +59,9 @@ export function buildProjectContext(cwd: string): ProjectContext {
     ctx.changedFiles = output.trim().split('\n').filter(Boolean).slice(0, 20);
   } catch { /* no git or not a repo */ }
 
+  cachedContext = ctx;
+  cachedContextCwd = cwd;
+  cacheTime = now;
   return ctx;
 }
 

@@ -37,17 +37,18 @@ import { detectProject } from '../utils/project.js';
 import { CommandHistory } from '../utils/history.js';
 import { notifyComplete } from '../utils/notify.js';
 import { calculateCost, logCost } from '../utils/cost.js';
-import { SnippetLibrary } from '../utils/snippets.js';
 import { MemoryStore } from '../utils/memory.js';
 import type { Workflow } from '../utils/workflow.js';
-import { FileWatcher } from '../utils/watcher.js';
 import { buildProjectContext, extractRelevantContext, type ProjectContext } from '../utils/context.js';
 import { buildSystemPrompt, extractRecentErrors } from '../utils/prompt-builder.js';
-import { MCPClient } from '../mcp/client.js';
-import { SubAgentManager } from '../agent/sub-agent.js';
 import { PluginManager } from '../plugins/manager.js';
-import { KnowledgeBase } from '../utils/knowledge-base.js';
 import { globalHooks } from '../hooks/index.js';
+// Lazy-loaded heavy modules (type-only imports for type annotations)
+import type { SnippetLibrary } from '../utils/snippets.js';
+import type { FileWatcher } from '../utils/watcher.js';
+import type { MCPClient } from '../mcp/client.js';
+import type { SubAgentManager } from '../agent/sub-agent.js';
+import type { KnowledgeBase } from '../utils/knowledge-base.js';
 // Command router imports
 import { handleSlashCommand as routeCommand } from '../commands/index.js';
 import type { CommandContext } from '../commands/types.js';
@@ -111,13 +112,33 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const modeRef = useRef<AgentMode>(mode);
   const configRef = useRef<Config>(config);
   const commandHistory = useRef(new CommandHistory());
-  const snippetLibrary = useRef(new SnippetLibrary());
+  const snippetLibrary = useRef<SnippetLibrary | null>(null);
+  const getSnippetLibrary = useCallback((): SnippetLibrary => {
+    if (!snippetLibrary.current) snippetLibrary.current = new (require('../utils/snippets.js').SnippetLibrary)();
+    return snippetLibrary.current!;
+  }, []);
   const memoryStore = useRef(new MemoryStore());
-  const fileWatcher = useRef(new FileWatcher());
-  const mcpClient = useRef<MCPClient>(new MCPClient());
-  const subAgentManager = useRef(new SubAgentManager(3));
+  const fileWatcher = useRef<FileWatcher | null>(null);
+  const getFileWatcher = useCallback((): FileWatcher => {
+    if (!fileWatcher.current) fileWatcher.current = new (require('../utils/watcher.js').FileWatcher)();
+    return fileWatcher.current!;
+  }, []);
+  const mcpClient = useRef<MCPClient | null>(null);
+  const getMcpClient = useCallback((): MCPClient => {
+    if (!mcpClient.current) mcpClient.current = new (require('../mcp/client.js').MCPClient)();
+    return mcpClient.current!;
+  }, []);
+  const subAgentManager = useRef<SubAgentManager | null>(null);
+  const getSubAgentManager = useCallback((): SubAgentManager => {
+    if (!subAgentManager.current) subAgentManager.current = new (require('../agent/sub-agent.js').SubAgentManager)(3);
+    return subAgentManager.current!;
+  }, []);
   const pluginManager = useRef<PluginManager | null>(null);
-  const knowledgeBase = useRef(new KnowledgeBase());
+  const knowledgeBase = useRef<KnowledgeBase | null>(null);
+  const getKnowledgeBase = useCallback((): KnowledgeBase => {
+    if (!knowledgeBase.current) knowledgeBase.current = new (require('../utils/knowledge-base.js').KnowledgeBase)();
+    return knowledgeBase.current!;
+  }, []);
   const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);
   const autoCommit = useRef(false);
   const isAutoCommitting = useRef(false);
@@ -197,10 +218,11 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
 
   // Connect MCP servers and register their tools
   useEffect(() => {
-    const mcp = mcpClient.current;
-    const registry = toolRegistry.current;
     const servers = config.mcp.servers;
     if (servers.length === 0) return;
+
+    const mcp = getMcpClient();
+    const registry = toolRegistry.current;
 
     (async () => {
       for (const serverCfg of servers) {
@@ -735,7 +757,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     return () => {
       globalHooks.trigger('on-session-end', {});
       sessionManager.current.close();
-      mcpClient.current.disconnectAll();
+      mcpClient.current?.disconnectAll();
       if (streamTimerRef.current) clearInterval(streamTimerRef.current);
     };
   }, []);

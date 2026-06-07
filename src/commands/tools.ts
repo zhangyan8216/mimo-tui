@@ -65,7 +65,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
 
     case 'debug': {
       if (cmdArgs[0] === 'agents') {
-        const sam = subAgentManager.current;
+        const sam = subAgentManager.current!;
         const allTasks = sam.getAllTasks();
         const wf = activeWorkflow.current;
         const agentInfo = [
@@ -76,7 +76,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
           `  排队中: ${sam.pendingCount}`,
           `  已生成: ${allTasks.length}`,
           ``,
-          `**文件监控**: ${fileWatcher.current.isWatching ? '运行中' : '未启用'}`,
+          `**文件监控**: ${fileWatcher.current!.isWatching ? '运行中' : '未启用'}`,
           `**自动提交**: ${autoCommit.current ? '开启' : '关闭'}`,
           `**自动测试**: ${autoTest.current ? '开启' : '关闭'}`,
           ``,
@@ -296,7 +296,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
     case 'snip': {
       const sub = cmdArgs[0] || 'list';
       if (sub === 'list') {
-        const snippets = snippetLibrary.current.list();
+        const snippets = snippetLibrary.current!.list();
         if (snippets.length === 0) {
           setMessages(prev => [...prev, { role: 'assistant', content: '📎 代码片段库为空。用 `/snip add <名称> <代码>` 添加' }]);
         } else {
@@ -307,14 +307,14 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         const name = cmdArgs[1];
         const content = cmdArgs.slice(2).join(' ');
         if (name && content) {
-          snippetLibrary.current.add(name, content);
+          snippetLibrary.current!.add(name, content);
           setMessages(prev => [...prev, { role: 'assistant', content: `✅ 已保存片段: **${name}**` }]);
         } else {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/snip add <名称> <代码>`' }]);
         }
       } else if (sub === 'search') {
         const query = cmdArgs.slice(1).join(' ');
-        const results = snippetLibrary.current.search(query);
+        const results = snippetLibrary.current!.search(query);
         if (results.length === 0) {
           setMessages(prev => [...prev, { role: 'assistant', content: `🔍 未找到匹配 "${query}" 的片段` }]);
         } else {
@@ -323,7 +323,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         }
       } else if (sub === 'rm') {
         const id = cmdArgs[1];
-        if (id && snippetLibrary.current.remove(id)) {
+        if (id && snippetLibrary.current!.remove(id)) {
           setMessages(prev => [...prev, { role: 'assistant', content: `✅ 已删除片段: ${id}` }]);
         } else {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/snip rm <id>`' }]);
@@ -491,13 +491,13 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
     case 'watch': {
       const sub = cmdArgs[0];
       if (sub === 'start') {
-        fileWatcher.current.watch(process.cwd(), (change) => {
-          setFileChanges(fileWatcher.current.getSummary());
+        fileWatcher.current!.watch(process.cwd(), (change) => {
+          setFileChanges(fileWatcher.current!.getSummary());
         });
         setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 开始监控文件变更...' }]);
       } else if (sub === 'test') {
-        fileWatcher.current.watch(process.cwd(), (change) => {
-          setFileChanges(fileWatcher.current.getSummary());
+        fileWatcher.current!.watch(process.cwd(), (change) => {
+          setFileChanges(fileWatcher.current!.getSummary());
           const timer = setTimeout(() => {
             setMessages(prev => [...prev, { role: 'assistant', content: `🔄 检测到文件变更，自动运行测试...` }]);
             handleSubmit('请用 test_runner 工具运行项目测试，只报告失败的测试。如果全部通过，只说"✅ 测试通过"。');
@@ -507,10 +507,10 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 文件变更自动测试已启动\n修改文件后 2 秒自动运行测试\n`/watch stop` 停止' }]);
       } else if (sub === 'stop') {
         if ((fileWatcher as any)._testTimer) clearTimeout((fileWatcher as any)._testTimer);
-        fileWatcher.current.stop();
+        fileWatcher.current!.stop();
         setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 已停止文件监控' }]);
       } else {
-        const summary = fileWatcher.current.getSummary();
+        const summary = fileWatcher.current!.getSummary();
         setMessages(prev => [...prev, { role: 'assistant', content: `👁️ **文件变更**\n${summary}\n\n\`/watch start\` 监控 · \`/watch test\` 自动测试 · \`/watch stop\` 停止` }]);
       }
       break;
@@ -539,12 +539,12 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
       } else if (sub === 'test') {
         autoTest.current = !autoTest.current;
         if (autoTest.current) {
-          fileWatcher.current.watch(process.cwd(), () => {
+          fileWatcher.current!.watch(process.cwd(), () => {
             handleSubmit('请用 test_runner 运行测试，只报告失败项');
           });
           setMessages(prev => [...prev, { role: 'assistant', content: '🧪 自动测试已开启 - 文件变更时自动运行测试' }]);
         } else {
-          fileWatcher.current.stop();
+          fileWatcher.current!.stop();
           setMessages(prev => [...prev, { role: 'assistant', content: '🧪 自动测试已关闭' }]);
         }
       } else {
@@ -560,7 +560,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         const title = cmdArgs[1];
         const content = cmdArgs.slice(2).join(' ');
         if (title && content) {
-          knowledgeBase.current.add(title, content);
+          knowledgeBase.current!.add(title, content);
           setMessages(prev => [...prev, { role: 'assistant', content: `📚 已添加知识: **${title}**` }]);
         } else {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb add <标题> <内容>`' }]);
@@ -570,7 +570,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         if (!query) {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb search <关键词>`' }]);
         } else {
-          const results = knowledgeBase.current.search(query);
+          const results = knowledgeBase.current!.search(query);
           if (results.length === 0) {
             setMessages(prev => [...prev, { role: 'assistant', content: `🔍 未找到匹配 "${query}" 的知识` }]);
           } else {
@@ -580,7 +580,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         }
       } else if (sub === 'del' || sub === 'rm') {
         const id = cmdArgs[1];
-        if (id && knowledgeBase.current.delete(id)) {
+        if (id && knowledgeBase.current!.delete(id)) {
           setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ 已删除知识: ${id}` }]);
         } else {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb del <id>`' }]);
@@ -590,7 +590,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         if (!id) {
           setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb get <id>`' }]);
         } else {
-          const entry = knowledgeBase.current.get(id);
+          const entry = knowledgeBase.current!.get(id);
           if (entry) {
             setMessages(prev => [...prev, { role: 'assistant', content: `📚 **${entry.title}**\n标签: [${entry.tags.join(', ')}]\n来源: ${entry.source}\n创建: ${entry.created}\n更新: ${entry.updated}\n\n${entry.content}` }]);
           } else {
@@ -598,7 +598,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
           }
         }
       } else {
-        const entries = knowledgeBase.current.list();
+        const entries = knowledgeBase.current!.list();
         if (entries.length === 0) {
           setMessages(prev => [...prev, { role: 'assistant', content: '📚 知识库为空。用 `/kb add <标题> <内容>` 添加知识' }]);
         } else {

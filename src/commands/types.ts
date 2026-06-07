@@ -39,14 +39,14 @@ export interface CommandContext {
   cwd: string;
 
   // Additional refs used by commands
-  subAgentManager: React.MutableRefObject<SubAgentManager>;
-  fileWatcher: React.MutableRefObject<FileWatcher>;
-  snippetLibrary: React.MutableRefObject<SnippetLibrary>;
+  subAgentManager: React.MutableRefObject<SubAgentManager | null>;
+  fileWatcher: React.MutableRefObject<FileWatcher | null>;
+  snippetLibrary: React.MutableRefObject<SnippetLibrary | null>;
   memoryStore: React.MutableRefObject<MemoryStore>;
-  knowledgeBase: React.MutableRefObject<KnowledgeBase>;
+  knowledgeBase: React.MutableRefObject<KnowledgeBase | null>;
   commandHistory: React.MutableRefObject<CommandHistory>;
   pluginManager: React.MutableRefObject<PluginManager | null>;
-  mcpClient: React.MutableRefObject<MCPClient>;
+  mcpClient: React.MutableRefObject<MCPClient | null>;
   activeWorkflow: React.MutableRefObject<{ workflow: Workflow; stepIndex: number } | null>;
   autoCommit: React.MutableRefObject<boolean>;
   autoTest: React.MutableRefObject<boolean>;
