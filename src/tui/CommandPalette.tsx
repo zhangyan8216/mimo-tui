@@ -116,6 +116,10 @@ const COMMANDS: Command[] = [
   { id: 'clean-sessions', label: '清理旧会话', description: '删除超过7天的历史会话', category: '会话', action: 'clean sessions' },
   { id: 'clean-memory', label: '清空记忆', description: '清空所有持久化记忆', category: '会话', action: 'clean memory' },
   { id: 'help', label: '帮助', description: '键盘快捷键和命令', shortcut: '?', category: '工具', action: 'help' },
+  { id: 'kb', label: '知识库', description: '管理知识库条目 (添加/搜索/查看/删除)', category: '工具', action: 'kb' },
+  { id: 'kb-add', label: '添加知识', description: '向知识库添加新条目', category: '工具', action: 'kb add' },
+  { id: 'kb-search', label: '搜索知识库', description: '在知识库中搜索', category: '工具', action: 'kb search' },
+  { id: 'code-review-diff', label: '审查未提交变更', description: '审查 git diff 中的未提交变更', category: '工具', action: 'review' },
 ];
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ theme, currentMode, onSelect, onClose }) => {

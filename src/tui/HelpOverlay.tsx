@@ -68,7 +68,7 @@ export const HelpOverlay: React.FC<HelpOverlayProps> = ({ theme, onClose }) => {
         <Text>  <K>/review</K>  <Text color={theme.fg.sub}>代码审查</Text>    <K>/status</K>   <Text color={theme.fg.sub}>任务状态</Text></Text>
         <Text>  <K>/auto</K>    <Text color={theme.fg.sub}>自动化工作流</Text>  <K>/pipeline</K> <Text color={theme.fg.sub}>管道任务</Text></Text>
         <Text>  <K>/kill</K>    <Text color={theme.fg.sub}>终止所有任务</Text>  <K>/clean</K>    <Text color={theme.fg.sub}>清理数据</Text></Text>
-        <Text>  <K>/metrics</K> <Text color={theme.fg.sub}>会话指标</Text>    <K>/config edit</K>  <Text color={theme.fg.sub}>编辑配置</Text></Text>
+        <Text>  <K>/metrics</K> <Text color={theme.fg.sub}>会话指标</Text>    <K>/kb</K>       <Text color={theme.fg.sub}>知识库管理</Text></Text>
         <Text>  <K>/debug agents</K> <Text color={theme.fg.sub}>智能体状态</Text>  <K>/config reset</K> <Text color={theme.fg.sub}>重置配置</Text></Text>
 
         <Text color={theme.tone.accent} bold>Git 子命令</Text>
@@ -117,6 +117,9 @@ export const HelpOverlay: React.FC<HelpOverlayProps> = ({ theme, onClose }) => {
         <Text>  <K>/git authors</K>           <Text color={theme.fg.sub}>所有作者及提交次数</Text></Text>
         <Text>  <K>/git churn</K>             <Text color={theme.fg.sub}>文件变更频率排名</Text></Text>
         <Text>  <K>/git timeline &lt;file&gt;</K>   <Text color={theme.fg.sub}>文件提交时间线</Text></Text>
+
+        <Text color={theme.tone.accent} bold>AI 工具</Text>
+        <Text>  <K>code_review</K> <Text color={theme.fg.sub}>代码审查 (diff/file/pr/staged)</Text></Text>
 
         <Text color={theme.tone.accent} bold>插件</Text>
         <Text color={theme.fg.sub}>📁 插件放在 .mimo/plugins/ 目录</Text>

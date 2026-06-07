@@ -24,6 +24,10 @@ import { testRunnerTool } from '../tools/test-runner.js';
 import { multiEditTool } from '../tools/multi-edit.js';
 import { dockerTool } from '../tools/docker.js';
 import { coverageTool } from '../tools/coverage.js';
+import { databaseTool } from '../tools/database.js';
+import { codeReviewTool } from '../tools/code-review.js';
+import { benchmarkTool } from '../tools/benchmark.js';
+import { monitor } from '../utils/monitor.js';
 import { AgentLoop } from '../agent/loop.js';
 import { compactContext, needsCompaction } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -48,6 +52,7 @@ import { buildSystemPrompt, extractRecentErrors } from '../utils/prompt-builder.
 import { MCPClient } from '../mcp/client.js';
 import { SubAgentManager } from '../agent/sub-agent.js';
 import { PluginManager } from '../plugins/manager.js';
+import { KnowledgeBase } from '../utils/knowledge-base.js';
 import { ChatView } from './ChatView.js';
 import { InputArea } from './InputArea.js';
 import { StatusBar } from './StatusBar.js';
@@ -157,6 +162,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const mcpClient = useRef<MCPClient>(new MCPClient());
   const subAgentManager = useRef(new SubAgentManager(3));
   const pluginManager = useRef<PluginManager | null>(null);
+  const knowledgeBase = useRef(new KnowledgeBase());
   const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);
   const autoCommit = useRef(false);
   const isAutoCommitting = useRef(false);
@@ -184,6 +190,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     registry.register(multiEditTool);
     registry.register(dockerTool);
     registry.register(coverageTool);
+    registry.register(databaseTool);
+    registry.register(codeReviewTool);
+    registry.register(benchmarkTool);
     return registry;
   })());
 
@@ -1815,6 +1824,69 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         break;
       }
 
+      // ===== 知识库 =====
+      case 'kb': {
+        const sub = cmdArgs[0] || 'list';
+        if (sub === 'add') {
+          const title = cmdArgs[1];
+          const content = cmdArgs.slice(2).join(' ');
+          if (title && content) {
+            knowledgeBase.current.add(title, content);
+            setMessages(prev => [...prev, { role: 'assistant', content: `📚 已添加知识: **${title}**` }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb add <标题> <内容>`' }]);
+          }
+        } else if (sub === 'search') {
+          const query = cmdArgs.slice(1).join(' ');
+          if (!query) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb search <关键词>`' }]);
+          } else {
+            const results = knowledgeBase.current.search(query);
+            if (results.length === 0) {
+              setMessages(prev => [...prev, { role: 'assistant', content: `🔍 未找到匹配 "${query}" 的知识` }]);
+            } else {
+              const list = results.map(e => `- \`${e.id}\` **${e.title}** [${e.tags.join(',')}] ${e.content.slice(0, 60)}...`).join('\n');
+              setMessages(prev => [...prev, { role: 'assistant', content: `📚 找到 ${results.length} 条知识:\n${list}` }]);
+            }
+          }
+        } else if (sub === 'del' || sub === 'rm') {
+          const id = cmdArgs[1];
+          if (id && knowledgeBase.current.delete(id)) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ 已删除知识: ${id}` }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb del <id>`' }]);
+          }
+        } else if (sub === 'get') {
+          const id = cmdArgs[1];
+          if (!id) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '用法: `/kb get <id>`' }]);
+          } else {
+            const entry = knowledgeBase.current.get(id);
+            if (entry) {
+              setMessages(prev => [...prev, { role: 'assistant', content: `📚 **${entry.title}**\n标签: [${entry.tags.join(', ')}]\n来源: ${entry.source}\n创建: ${entry.created}\n更新: ${entry.updated}\n\n${entry.content}` }]);
+            } else {
+              setMessages(prev => [...prev, { role: 'assistant', content: `❓ 未找到知识: ${id}` }]);
+            }
+          }
+        } else {
+          // list
+          const entries = knowledgeBase.current.list();
+          if (entries.length === 0) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '📚 知识库为空。用 `/kb add <标题> <内容>` 添加知识' }]);
+          } else {
+            const list = entries.map(e => `- \`${e.id}\` **${e.title}** [${e.tags.join(',')}] ${e.content.slice(0, 60)}...`).join('\n');
+            setMessages(prev => [...prev, { role: 'assistant', content: `📚 **知识库** (${entries.length} 条)\n${list}\n\n\`/kb add\` 添加 · \`/kb search\` 搜索 · \`/kb get\` 查看 · \`/kb del\` 删除` }]);
+          }
+        }
+        break;
+      }
+
+      case 'monitor': {
+        const report = monitor.getReport();
+        setMessages(prev => [...prev, { role: 'assistant', content: report }]);
+        break;
+      }
+
       // Check plugin commands
       default: {
         if (pluginManager.current?.hasCommand(cmd)) {
@@ -2335,7 +2407,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
               'history', 'search', 'rename', 'tokens', 'template', 'snippet', 'config',
               'bookmark', 'stats', 'context', 'shortcuts', 'remember', 'forget', 'workflow',
               'suggest', 'watch', 'chain', 'cd', 'think', 'fix', 'improve', 'batch', 'sub', 'tips',
-              'parallel', 'explore', 'review', 'status', 'auto', 'pipeline', 'kill', 'clean', 'metrics',
+              'parallel', 'explore', 'review', 'status', 'auto', 'pipeline', 'kill', 'clean', 'metrics', 'kb', 'monitor',
             ]}
             initialHistory={commandHistory.current.getAll()}
           />

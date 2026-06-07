@@ -8,6 +8,7 @@ import { ToolRegistry, type ToolContext } from '../tools/registry.js';
 import { isToolAllowedInMode, needsApproval, isReadOnlyTool } from './modes.js';
 import { accumulateUsage } from '../utils/tokens.js';
 import { log } from '../utils/logger.js';
+import { monitor } from '../utils/monitor.js';
 
 export interface AgentLoopCallbacks {
   onToken?: (token: string) => void;
@@ -65,6 +66,7 @@ export class AgentLoop {
 
     while (iterations < this.maxIterations) {
       iterations++;
+      monitor.startTimer('iteration');
       log('debug', `Agent loop iteration ${iterations}`);
 
       const toolDefs = this.getToolsForMode(mode);
@@ -386,6 +388,8 @@ export class AgentLoop {
       } else {
         consecutiveToolErrors = 0;
       }
+
+      monitor.endTimer('iteration');
     }
 
     return { messages: this.messages, usage: this.totalUsage };
@@ -478,10 +482,12 @@ export class AgentLoop {
     args: Record<string, unknown>,
     maxRetries = 2,
   ): Promise<{ output: string; error?: string; tool_call_id?: string }> {
+    monitor.startTimer(`tool:${name}`);
     let lastError: { output: string; error?: string; tool_call_id?: string } | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const result = await this.tools.execute(name, args, this.toolContext);
       if (!result.error) {
+        monitor.endTimer(`tool:${name}`);
         return result;
       }
       lastError = result;
@@ -490,9 +496,11 @@ export class AgentLoop {
         // Brief delay before retry
         await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
       } else {
+        monitor.endTimer(`tool:${name}`);
         return result;
       }
     }
+    monitor.endTimer(`tool:${name}`);
     return lastError!;
   }
 

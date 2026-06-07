@@ -81,6 +81,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ theme, onComplete, onC
               showThinking: true,
               showTokens: true,
               compactMode: false,
+              locale: 'zh' as const,
             },
             mcp: { servers: [] },
           });

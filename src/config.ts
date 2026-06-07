@@ -6,6 +6,7 @@ import os from 'os';
 import { parse as parseToml } from 'smol-toml';
 import type { AgentMode, MCPServerConfig } from './api/types.js';
 import type { ProviderType } from './api/providers/index.js';
+import type { Locale } from './utils/i18n.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimo');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.toml');
@@ -29,6 +30,7 @@ export interface Config {
     showThinking: boolean;
     showTokens: boolean;
     compactMode: boolean;
+    locale: Locale;
   };
   mcp: {
     servers: MCPServerConfig[];
@@ -54,6 +56,7 @@ export const DEFAULT_CONFIG: Config = {
     showThinking: true,
     showTokens: true,
     compactMode: false,
+    locale: 'zh' as Locale,
   },
   mcp: {
     servers: [],
@@ -90,6 +93,7 @@ export function loadConfig(): Config {
         if (u.show_thinking !== undefined) config.ui.showThinking = Boolean(u.show_thinking);
         if (u.show_tokens !== undefined) config.ui.showTokens = Boolean(u.show_tokens);
         if (u.compact_mode !== undefined) config.ui.compactMode = Boolean(u.compact_mode);
+        if (u.locale && (u.locale === 'zh' || u.locale === 'en')) config.ui.locale = u.locale as Locale;
       }
       if (toml.mcp && (toml.mcp as Record<string, unknown>).servers) {
         config.mcp.servers = ((toml.mcp as Record<string, unknown>).servers as Record<string, unknown>[]).map(s => ({
@@ -140,6 +144,7 @@ theme = "${escapeTomlString(config.ui.theme)}"
 show_thinking = ${config.ui.showThinking}
 show_tokens = ${config.ui.showTokens}
 compact_mode = ${config.ui.compactMode}
+locale = "${config.ui.locale}"
 `;
 
   fs.writeFileSync(CONFIG_FILE, toml, 'utf-8');
