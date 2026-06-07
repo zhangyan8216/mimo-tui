@@ -6,21 +6,21 @@ import type { Tool, ToolContext } from './registry.js';
 
 export const editFileTool: Tool = {
   name: 'edit_file',
-  description: 'Edit a file by replacing a specific string. Use for precise, targeted edits.',
+  description: '精确替换文件中的文本。修改已有文件的首选工具。必须先用 read_file 读取文件，然后从读取结果中复制 old_string（必须完全一致）。old_string 必须在文件中唯一。',
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
-        description: 'Path to the file to edit',
+        description: '文件路径。示例: "src/App.tsx"',
       },
       old_string: {
         type: 'string',
-        description: 'The exact string to search for (must be unique in the file)',
+        description: '要替换的原文。必须与文件内容完全一致（含空格缩进换行）。从 read_file 结果中复制。如不唯一，增加更多上下文行。',
       },
       new_string: {
         type: 'string',
-        description: 'The replacement string',
+        description: '替换后的新文本。留空 "" 表示删除。',
       },
     },
     required: ['path', 'old_string', 'new_string'],

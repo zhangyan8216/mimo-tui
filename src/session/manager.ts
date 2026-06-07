@@ -1,6 +1,6 @@
 // src/session/manager.ts - Session management
 
-import type { Session, AgentMode, Message } from '../api/types.js';
+import type { Session, AgentMode, Message, TokenUsage } from '../api/types.js';
 import { SessionStore } from './store.js';
 
 export class SessionManager {
@@ -57,6 +57,11 @@ export class SessionManager {
     if (!this.currentSession) return;
     this.store.renameSession(this.currentSession.id, name);
     this.currentSession.name = name;
+  }
+
+  updateUsage(usage: TokenUsage): void {
+    if (!this.currentSession) return;
+    this.store.updateUsage(this.currentSession.id, usage);
   }
 
   get current(): Session | null {

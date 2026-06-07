@@ -13,18 +13,18 @@ let nextId = 1;
 
 export const todoTool: Tool = {
   name: 'todo',
-  description: 'Manage a task/todo list for the current session. Supports add, update, list, and clear operations.',
+  description: '管理当前会话的任务列表。适合拆分复杂任务为多个步骤，跟踪进度。',
   parameters: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
         enum: ['add', 'update', 'list', 'clear'],
-        description: 'The action to perform',
+        description: '操作类型: add(添加), update(更新状态), list(列出所有), clear(清空)',
       },
       content: {
         type: 'string',
-        description: 'Task content (for add action)',
+        description: '任务描述（add 时必填）。示例: "修复登录页面的验证逻辑"',
       },
       id: {
         type: 'number',

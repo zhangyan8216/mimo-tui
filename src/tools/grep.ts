@@ -8,29 +8,29 @@ import type { Tool, ToolContext } from './registry.js';
 
 export const grepTool: Tool = {
   name: 'grep',
-  description: 'Search file contents using regex pattern. Uses ripgrep if available, otherwise falls back to built-in search.',
+  description: '按正则表达式搜索文件内容。优先使用 ripgrep，不可用时回退到内置搜索。用于查找代码中的函数、变量、文本等。',
   parameters: {
     type: 'object',
     properties: {
       pattern: {
         type: 'string',
-        description: 'Regex pattern to search for',
+        description: '正则表达式。示例: "function\\\\s+\\\\w+", "TODO|FIXME", "import.*from"',
       },
       path: {
         type: 'string',
-        description: 'Directory or file to search in (default: current directory)',
+        description: '搜索目录或文件。默认为当前目录',
       },
       glob: {
         type: 'string',
-        description: 'File glob pattern to filter (e.g., "*.ts")',
+        description: '文件过滤模式。示例: "*.ts", "*.py"',
       },
       case_insensitive: {
         type: 'boolean',
-        description: 'Case insensitive search (default: false)',
+        description: '是否忽略大小写。默认 false',
       },
       max_results: {
         type: 'number',
-        description: 'Maximum number of results (default: 50)',
+        description: '最大结果数。默认 50',
       },
     },
     required: ['pattern'],
@@ -90,7 +90,12 @@ function builtinSearch(
   pattern: string, searchPath: string, fileGlob?: string,
   caseInsensitive?: boolean, maxResults?: number
 ): string {
-  const regex = new RegExp(pattern, caseInsensitive ? 'gi' : 'g');
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, caseInsensitive ? 'gi' : 'g');
+  } catch {
+    return `Invalid regex pattern: ${pattern}`;
+  }
   const results: string[] = [];
   const limit = maxResults || 50;
 

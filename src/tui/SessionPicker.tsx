@@ -83,7 +83,7 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
 
       <Box marginTop={1}>
         <Text dimColor color={theme.fg.meta}>
-          ↑↓ 导航 · Enter 选择 · Esc 关闭
+          ↑↓ 导航 · Enter 选择 · Ctrl+D 删除 · Esc 关闭
         </Text>
       </Box>
     </Box>

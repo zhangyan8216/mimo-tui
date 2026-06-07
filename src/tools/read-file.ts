@@ -6,21 +6,21 @@ import type { Tool, ToolContext } from './registry.js';
 
 export const readFileTool: Tool = {
   name: 'read_file',
-  description: 'Read the contents of a file. Returns the file content with line numbers.',
+  description: '读取文件内容（带行号）。修改文件前必须先用此工具读取。大文件用 offset+limit 分段读取。',
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
-        description: 'Path to the file to read (relative to working directory or absolute)',
+        description: '文件路径。示例: "src/index.ts"',
       },
       offset: {
         type: 'number',
-        description: 'Line number to start reading from (0-based)',
+        description: '起始行号（从 0 开始）。省略则从头读',
       },
       limit: {
         type: 'number',
-        description: 'Maximum number of lines to read (default: 2000)',
+        description: '最多读取行数。默认 2000',
       },
     },
     required: ['path'],
@@ -35,6 +35,12 @@ export const readFileTool: Tool = {
 
     if (!fs.existsSync(validation.resolved)) {
       throw new Error(`File not found: ${validation.resolved}`);
+    }
+
+    // 文件大小保护：超过 2MB 的文件拒绝完整读取
+    const stat = fs.statSync(validation.resolved);
+    if (stat.size > 2 * 1024 * 1024) {
+      throw new Error(`File too large (${(stat.size / 1024 / 1024).toFixed(1)}MB). Use offset/limit to read a portion.`);
     }
 
     const content = fs.readFileSync(validation.resolved, 'utf-8');

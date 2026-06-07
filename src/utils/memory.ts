@@ -95,6 +95,12 @@ export class MemoryStore {
     return [...this.memories];
   }
 
+  /** 清空所有记忆 */
+  clear(): void {
+    this.memories = [];
+    this.save();
+  }
+
   private load(): void {
     try {
       if (fs.existsSync(MEMORY_FILE)) {

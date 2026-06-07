@@ -84,10 +84,16 @@ export const ApprovalDialog: React.FC<ApprovalDialogProps> = ({ toolName, args, 
 
 function formatApprovalArgs(toolName: string, args: Record<string, unknown>): string {
   switch (toolName) {
-    case 'write_file':
-      return `写入: ${args.path}\n${String(args.content || '').split('\n').length} 行`;
-    case 'edit_file':
-      return `编辑: ${args.path}`;
+    case 'write_file': {
+      const lines = String(args.content || '').split('\n').length;
+      return `写入: ${args.path} (${lines} 行)`;
+    }
+    case 'edit_file': {
+      const oldStr = String(args.old_string || '');
+      const newStr = String(args.new_string || '');
+      const preview = oldStr.length > 60 ? oldStr.slice(0, 60) + '...' : oldStr;
+      return `编辑: ${args.path}\n  - ${preview}\n  + ${newStr.length > 60 ? newStr.slice(0, 60) + '...' : newStr}`;
+    }
     case 'shell':
       return `$ ${args.command}`;
     case 'web_fetch':

@@ -20,7 +20,7 @@ export interface Config {
     maxIterations: number;
     autoApproveReads: boolean;
     thinkingEnabled: boolean;
-    reasoningEffort: 'low' | 'medium' | 'high';
+    reasoningEffort: 'low' | 'medium' | 'high' | 'auto';
   };
   ui: {
     theme: string;
@@ -33,7 +33,7 @@ export interface Config {
   };
 }
 
-const DEFAULT_CONFIG: Config = {
+export const DEFAULT_CONFIG: Config = {
   provider: {
     apiKey: '',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',

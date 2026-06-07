@@ -11,13 +11,14 @@ interface ChatViewProps {
   theme: Theme;
   streamingContent?: string;
   streamingThinking?: string;
+  streamingToolCalls?: Map<number, { name: string; args: string }>;
   isStreaming?: boolean;
   isThinking?: boolean;
   toolResults?: Map<string, { result?: string; error?: string; status: 'running' | 'completed' | 'failed' }>;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
-  messages, theme, streamingContent, streamingThinking, isStreaming, isThinking, toolResults,
+  messages, theme, streamingContent, streamingThinking, streamingToolCalls, isStreaming, isThinking, toolResults,
 }) => {
   if (messages.length === 0 && !isStreaming) {
     return (
@@ -87,10 +88,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <Text color={theme.card.assistant.color} bold>
               {theme.card.assistant.glyph} MiMo
             </Text>
-            {!streamingContent && !streamingThinking && (
+            {!streamingContent && !streamingThinking && (!streamingToolCalls || streamingToolCalls.size === 0) && (
               <Text color={theme.tone.brand}> 思考中...</Text>
             )}
           </Box>
+          {/* Streaming tool calls with partial arguments */}
+          {streamingToolCalls && streamingToolCalls.size > 0 && (
+            <Box flexDirection="column" paddingLeft={1}>
+              {Array.from(streamingToolCalls.entries()).map(([index, tc]) => {
+                const icon = tc.name.startsWith('mcp_') ? '🔌' : '⚡';
+                // Show partial args, truncate for display
+                const argsPreview = tc.args.length > 60
+                  ? tc.args.slice(0, 60) + '...'
+                  : tc.args;
+                return (
+                  <Box key={index}>
+                    <Text color={theme.tone.brand}>
+                      {icon}{' '}
+                    </Text>
+                    <Text color={theme.fg.strong} bold>
+                      {tc.name || '...'}{' '}
+                    </Text>
+                    <Text dimColor color={theme.fg.meta}>
+                      {argsPreview || '{}'}
+                    </Text>
+                    <Text color={theme.tone.brand} bold> ▊</Text>
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
           <MessageBubble
             message={{ role: 'assistant', content: streamingContent || null }}
             theme={theme}

@@ -15,6 +15,10 @@ export class FileWatcher {
   private onChange: ((change: FileChange) => void) | null = null;
   private ignorePatterns: RegExp[];
 
+  get isWatching(): boolean {
+    return this.watchers.size > 0;
+  }
+
   constructor() {
     this.ignorePatterns = [
       /node_modules/,

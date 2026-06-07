@@ -6,17 +6,17 @@ import type { Tool, ToolContext } from './registry.js';
 
 export const writeFileTool: Tool = {
   name: 'write_file',
-  description: 'Write content to a file. Creates the file if it doesn\'t exist, overwrites if it does.',
+  description: '创建或覆盖写入文件。自动创建父目录。适合创建新文件或完全重写文件。修改已有文件请优先用 edit_file。',
   parameters: {
     type: 'object',
     properties: {
       path: {
         type: 'string',
-        description: 'Path to the file to write',
+        description: '文件路径。示例: "src/utils/helper.ts"',
       },
       content: {
         type: 'string',
-        description: 'Content to write to the file',
+        description: '要写入的完整文件内容',
       },
     },
     required: ['path', 'content'],

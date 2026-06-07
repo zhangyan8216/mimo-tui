@@ -4,17 +4,17 @@ import type { Tool, ToolContext } from './registry.js';
 
 export const webFetchTool: Tool = {
   name: 'web_fetch',
-  description: 'Fetch content from a URL. Returns the response body as text.',
+  description: '获取网页内容，返回文本。用于查阅文档、API 参考、错误信息搜索等。',
   parameters: {
     type: 'object',
     properties: {
       url: {
         type: 'string',
-        description: 'The URL to fetch',
+        description: '要获取的 URL。示例: "https://docs.example.com/api"',
       },
       max_length: {
         type: 'number',
-        description: 'Maximum content length in characters (default: 10000)',
+        description: '最大返回字符数。默认 10000',
       },
     },
     required: ['url'],

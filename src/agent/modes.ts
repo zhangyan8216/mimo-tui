@@ -52,11 +52,17 @@ export function getModeConfig(mode: AgentMode): ModeConfig {
 
 export function isToolAllowedInMode(mode: AgentMode, toolName: string): boolean {
   if (mode === 'plan') {
-    // Plan mode: only read-only tools
-    const readOnlyTools = ['read_file', 'glob', 'grep', 'todo'];
-    return readOnlyTools.includes(toolName);
+    // Plan mode: block write tools, allow everything else (including MCP tools)
+    const blockedTools = ['write_file', 'edit_file', 'shell', 'web_fetch'];
+    return !blockedTools.includes(toolName);
   }
   return true; // agent and yolo allow all tools
+}
+
+const READ_ONLY_TOOLS = new Set(['read_file', 'glob', 'grep', 'todo']);
+
+export function isReadOnlyTool(toolName: string): boolean {
+  return READ_ONLY_TOOLS.has(toolName);
 }
 
 export function needsApproval(mode: AgentMode, toolName: string): boolean {

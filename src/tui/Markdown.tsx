@@ -51,13 +51,14 @@ export const Markdown: React.FC<MarkdownProps> = ({ content, theme }) => {
       continue;
     }
 
-    // List item (- * +)
+    // List item (- * + or 1.)
     const listMatch = line.match(/^(\s*)([-*+]|\d+\.)\s+(.+)$/);
     if (listMatch) {
       const indent = Math.floor((listMatch[1]?.length || 0) / 2);
+      const bullet = listMatch[2].match(/\d+\./) ? listMatch[2] : '•';
       elements.push(
         <Box key={`li-${elements.length}`} paddingLeft={indent}>
-          <Text color={theme.tone.accent}>{'  '.repeat(indent)}• </Text>
+          <Text color={theme.tone.accent}>{bullet} </Text>
           <Text color={theme.fg.body}>{renderInline(listMatch[3], theme)}</Text>
         </Box>
       );
@@ -68,6 +69,29 @@ export const Markdown: React.FC<MarkdownProps> = ({ content, theme }) => {
     // Empty line
     if (line.trim() === '') {
       elements.push(<Text key={`nl-${elements.length}`}>{'\n'}</Text>);
+      i++;
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      elements.push(
+        <Box key={`bq-${elements.length}`} paddingLeft={1}>
+          <Text color={theme.fg.faint}>│ </Text>
+          <Text color={theme.fg.sub} italic>{renderInline(line.slice(2), theme)}</Text>
+        </Box>
+      );
+      i++;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}\s*$/.test(line.trim())) {
+      elements.push(
+        <Text key={`hr-${elements.length}`} color={theme.fg.faint}>
+          {'─'.repeat(40)}
+        </Text>
+      );
       i++;
       continue;
     }
@@ -112,6 +136,15 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
       if (boldMatch[1]) parts.push(<Text key={keyIdx++}>{boldMatch[1]}</Text>);
       parts.push(<Text key={keyIdx++} bold>{boldMatch[2]}</Text>);
       remaining = boldMatch[3];
+      continue;
+    }
+
+    // Strikethrough ~~...~~
+    const strikeMatch = remaining.match(/^(.*?)~~(.+?)~~(.*)$/s);
+    if (strikeMatch) {
+      if (strikeMatch[1]) parts.push(<Text key={keyIdx++}>{strikeMatch[1]}</Text>);
+      parts.push(<Text key={keyIdx++} strikethrough>{strikeMatch[2]}</Text>);
+      remaining = strikeMatch[3];
       continue;
     }
 

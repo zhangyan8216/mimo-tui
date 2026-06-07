@@ -8,6 +8,25 @@ import { Markdown } from './Markdown.js';
 import { ThinkingBlock } from './ThinkingBlock.js';
 import { ToolCallView } from './ToolCallView.js';
 
+interface StreamingToolCallProps {
+  name: string;
+  args: string;
+  theme: Theme;
+}
+
+export const StreamingToolCall: React.FC<StreamingToolCallProps> = ({ name, args, theme }) => {
+  const icon = name.startsWith('mcp_') ? '🔌' : '⚡';
+  const argsPreview = args.length > 80 ? args.slice(0, 80) + '...' : args;
+  return (
+    <Box>
+      <Text color={theme.tone.brand}>{icon}{' '}</Text>
+      <Text color={theme.fg.strong} bold>{name || '...'}{' '}</Text>
+      <Text dimColor color={theme.fg.meta}>{argsPreview || '{}'}</Text>
+      <Text color={theme.tone.brand} bold>{' '}▊</Text>
+    </Box>
+  );
+};
+
 interface MessageBubbleProps {
   message: Message;
   theme: Theme;

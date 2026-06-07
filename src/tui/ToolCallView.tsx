@@ -3,6 +3,7 @@
 import React from 'react';
 import { Text, Box } from 'ink';
 import type { Theme } from './theme.js';
+import { DiffView } from './DiffView.js';
 
 interface ToolCallViewProps {
   name: string;
@@ -24,8 +25,15 @@ const TOOL_ICONS: Record<string, string> = {
   todo: '📋',
 };
 
+function getToolIcon(name: string): string {
+  if (TOOL_ICONS[name]) return TOOL_ICONS[name];
+  // MCP tools: mcp_serverName_toolName -> show MCP icon
+  if (name.startsWith('mcp_')) return '🔌';
+  return '⚡';
+}
+
 export const ToolCallView: React.FC<ToolCallViewProps> = ({ name, args, result, error, status, theme }) => {
-  const icon = TOOL_ICONS[name] || '⚡';
+  const icon = getToolIcon(name);
   const statusColor = status === 'running' ? theme.tone.brand
     : status === 'completed' ? theme.tone.ok
     : status === 'failed' ? theme.tone.err
@@ -69,6 +77,14 @@ export const ToolCallView: React.FC<ToolCallViewProps> = ({ name, args, result, 
             {formatResult(name, result)}
           </Text>
         </Box>
+      )}
+
+      {/* Diff view for file modifications */}
+      {status === 'completed' && name === 'write_file' && typeof args.content === 'string' && (
+        <DiffView oldText="" newText={args.content} theme={theme} filePath={String(args.path || '')} />
+      )}
+      {status === 'completed' && name === 'edit_file' && typeof args.old_string === 'string' && (
+        <DiffView oldText={args.old_string} newText={typeof args.new_string === 'string' ? args.new_string : ''} theme={theme} filePath={String(args.path || '')} />
       )}
     </Box>
   );

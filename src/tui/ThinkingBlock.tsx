@@ -1,4 +1,4 @@
-// src/tui/ThinkingBlock.tsx - Thinking/reasoning display with spinner animation
+// src/tui/ThinkingBlock.tsx - Thinking/reasoning display with toggle and streaming animation
 
 import React, { useState, useEffect } from 'react';
 import { Text, Box } from 'ink';
@@ -17,10 +17,17 @@ const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', 
 export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   content, theme, streaming, collapsed: externalCollapsed, onToggle,
 }) => {
-  const [internalCollapsed, setInternalCollapsed] = useState(true);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const collapsed = externalCollapsed ?? internalCollapsed;
+
+  // Auto-collapse when streaming ends
+  useEffect(() => {
+    if (!streaming && externalCollapsed === undefined) {
+      setInternalCollapsed(true);
+    }
+  }, [streaming, externalCollapsed]);
 
   // Spinner animation
   useEffect(() => {
@@ -32,6 +39,14 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
     return () => clearInterval(timer);
   }, [streaming]);
 
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalCollapsed(prev => !prev);
+    }
+  };
+
   if (!content) return null;
 
   const lines = content.split('\n');
@@ -41,7 +56,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
   return (
     <Box flexDirection="column" marginY={0}>
-      {/* Header */}
+      {/* Header - clickable to toggle */}
       <Box paddingLeft={1}>
         <Text color={card.color}>
           {streaming ? (
@@ -50,26 +65,18 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
               {' Thinking '}
               <Text dimColor>({duration})</Text>
             </>
-          ) : collapsed ? (
-            <>
-              <Text>{card.glyph}</Text>
-              {' 推理 '}
-              <Text dimColor>({duration})</Text>
-            </>
           ) : (
             <>
-              <Text>{card.glyph}</Text>
-              {' '}
-              <Text bold>推理</Text>
-              {' '}
-              <Text dimColor>({duration})</Text>
+              <Text>{collapsed ? '▸' : '▾'} {card.glyph}</Text>
+              {' 推理 '}
+              <Text dimColor>({duration}) {collapsed ? preview : ''}</Text>
             </>
           )}
         </Text>
       </Box>
 
-      {/* Content */}
-      {!collapsed && !streaming && (
+      {/* Content - visible when not collapsed */}
+      {!collapsed && (
         <Box
           flexDirection="column"
           paddingLeft={2}
@@ -84,8 +91,8 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         </Box>
       )}
 
-      {/* Streaming content (always visible during streaming) */}
-      {streaming && content && (
+      {/* Streaming content (always visible during streaming, last 3 lines) */}
+      {streaming && content && !collapsed && (
         <Box flexDirection="column" paddingLeft={2}>
           {lines.slice(-3).map((line, i) => (
             <Text key={i} dimColor color={theme.fg.meta}>

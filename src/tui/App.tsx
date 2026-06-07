@@ -5,7 +5,7 @@ import { Text, Box, useApp, useInput } from 'ink';
 import fs from 'fs';
 import path from 'path';
 import type { Config } from '../config.js';
-import { saveConfig } from '../config.js';
+import { saveConfig, DEFAULT_CONFIG } from '../config.js';
 import type { Message, TokenUsage, AgentMode, Skill } from '../api/types.js';
 import type { Theme } from './theme.js';
 import { getTheme } from './theme.js';
@@ -19,6 +19,9 @@ import { globTool } from '../tools/glob.js';
 import { grepTool } from '../tools/grep.js';
 import { webFetchTool } from '../tools/web-fetch.js';
 import { todoTool } from '../tools/todo.js';
+import { codebaseTool } from '../tools/codebase.js';
+import { testRunnerTool } from '../tools/test-runner.js';
+import { multiEditTool } from '../tools/multi-edit.js';
 import { AgentLoop } from '../agent/loop.js';
 import { compactContext, needsCompaction } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -35,9 +38,13 @@ import { SnippetLibrary } from '../utils/snippets.js';
 import { TEMPLATES, getTemplatesByCategory, searchTemplates } from '../utils/templates.js';
 import { calculateCost, logCost, getCostSummary } from '../utils/cost.js';
 import { MemoryStore } from '../utils/memory.js';
-import { BUILTIN_WORKFLOWS, searchWorkflows } from '../utils/workflow.js';
+import { BUILTIN_WORKFLOWS, type Workflow, searchWorkflows } from '../utils/workflow.js';
 import { FileWatcher } from '../utils/watcher.js';
 import { generateSuggestions } from '../utils/suggestions.js';
+import { buildProjectContext, extractRelevantContext, type ProjectContext } from '../utils/context.js';
+import { buildSystemPrompt, extractRecentErrors } from '../utils/prompt-builder.js';
+import { MCPClient } from '../mcp/client.js';
+import { SubAgentManager } from '../agent/sub-agent.js';
 import { ChatView } from './ChatView.js';
 import { InputArea } from './InputArea.js';
 import { StatusBar } from './StatusBar.js';
@@ -59,6 +66,50 @@ const EMPTY_USAGE: TokenUsage = {
   promptTokens: 0, completionTokens: 0, totalTokens: 0,
   cacheHitTokens: 0, cacheMissTokens: 0,
 };
+
+// Interface for user-defined workflow steps from .mimo/workflows.json
+interface UserWorkflowStep {
+  name: string;
+  prompt: string;
+}
+
+// Interface for user-defined workflows from .mimo/workflows.json
+interface UserWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  steps: UserWorkflowStep[];
+}
+
+interface UserWorkflowsConfig {
+  workflows: UserWorkflow[];
+}
+
+// Load user-defined workflows from .mimo/workflows.json
+function loadUserWorkflows(): Workflow[] {
+  try {
+    const workflowsPath = path.join(process.cwd(), '.mimo', 'workflows.json');
+    if (fs.existsSync(workflowsPath)) {
+      const content = fs.readFileSync(workflowsPath, 'utf-8');
+      const config: UserWorkflowsConfig = JSON.parse(content);
+      if (config.workflows && Array.isArray(config.workflows)) {
+        return config.workflows.map((wf, idx) => ({
+          id: wf.id,
+          name: wf.name,
+          description: wf.description,
+          steps: wf.steps.map((step, stepIdx) => ({
+            id: `${wf.id}-step-${stepIdx}`,
+            name: step.name,
+            prompt: step.prompt,
+          })),
+        }));
+      }
+    }
+  } catch (e) {
+    // Silently ignore parse errors for user workflows
+  }
+  return [];
+}
 
 export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, initialPrompt }) => {
   const { exit } = useApp();
@@ -83,6 +134,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     resolve: (approved: boolean) => void;
   } | null>(null);
   const [toolResults, setToolResults] = useState<Map<string, { result?: string; error?: string; status: 'running' | 'completed' | 'failed' }>>(new Map());
+  const [streamingToolCalls, setStreamingToolCalls] = useState<Map<number, { name: string; args: string }>>(new Map());
   const [iteration, setIteration] = useState(0);
   const [gitBranch, setGitBranch] = useState<string>('');
   const [gitDirty, setGitDirty] = useState(false);
@@ -99,6 +151,11 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const snippetLibrary = useRef(new SnippetLibrary());
   const memoryStore = useRef(new MemoryStore());
   const fileWatcher = useRef(new FileWatcher());
+  const mcpClient = useRef<MCPClient>(new MCPClient());
+  const subAgentManager = useRef(new SubAgentManager(3));
+  const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);
+  const autoCommit = useRef(false);
+  const autoTest = useRef(false);
   const [fileChanges, setFileChanges] = useState<string>('');
 
   // Keep refs in sync
@@ -117,10 +174,14 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     registry.register(grepTool);
     registry.register(webFetchTool);
     registry.register(todoTool);
+    registry.register(codebaseTool);
+    registry.register(testRunnerTool);
+    registry.register(multiEditTool);
     return registry;
   })());
 
   const sandbox = useRef(new Sandbox(process.cwd()));
+  const projectCtx = useRef<ProjectContext | null>(null);
 
   // 加载系统提示词
   const systemPrompt = useRef<string>('');
@@ -143,6 +204,13 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     systemPrompt.current = '你是 MiMo，一个运行在终端里的 AI 编程助手。用中文回答，简洁直接。';
   }, []);
 
+  // 构建项目上下文（文件树、依赖、配置等）
+  useEffect(() => {
+    try {
+      projectCtx.current = buildProjectContext(process.cwd());
+    } catch { /* ignore */ }
+  }, []);
+
   // 检测 Git 状态
   useEffect(() => {
     getGitInfo().then(info => {
@@ -155,6 +223,36 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   useEffect(() => {
     skills.current = loadSkills(process.cwd());
   }, []);
+
+  // Connect MCP servers and register their tools
+  useEffect(() => {
+    const mcp = mcpClient.current;
+    const registry = toolRegistry.current;
+    const servers = config.mcp.servers;
+    if (servers.length === 0) return;
+
+    (async () => {
+      for (const serverCfg of servers) {
+        try {
+          await mcp.connectServer(serverCfg);
+        } catch (e) {
+          process.stderr.write(`MCP server "${serverCfg.name}" failed: ${e}\n`);
+        }
+      }
+      // Register MCP tools as wrapper tools
+      for (const def of mcp.getAllToolDefinitions()) {
+        const mcpName = def.function.name;
+        const parsed = mcp.findServerForTool(mcpName);
+        if (!parsed) continue;
+        registry.register({
+          name: mcpName,
+          description: def.function.description,
+          parameters: def.function.parameters as Record<string, unknown>,
+          execute: async (args) => mcp.callTool(parsed.serverName, parsed.toolName, args),
+        });
+      }
+    })();
+  }, [config.mcp.servers]);
 
   // Handle setup completion
   const handleSetupComplete = useCallback((newConfig: Config) => {
@@ -178,22 +276,68 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         setUsage({ ...EMPTY_USAGE });
         break;
 
+      case 'fork': {
+        const newName = cmdArgs.join(' ') || `Fork - ${new Date().toLocaleString()}`;
+        const currentId = sessionManager.current.current?.id;
+        if (currentId) {
+          const forked = sessionManager.current.forkSession(currentId, newName);
+          if (forked) {
+            setMessages([...forked.messages, { role: 'assistant', content: `🔀 已分支会话: **${newName}**` }]);
+            setUsage(forked.token_usage);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❌ 分支失败' }]);
+          }
+        }
+        break;
+      }
+
       case 'mode':
         if (cmdArgs[0] && ['plan', 'agent', 'yolo'].includes(cmdArgs[0])) {
           setMode(cmdArgs[0] as AgentMode);
+          setConfig(prev => {
+            const updated = { ...prev, agent: { ...prev.agent, mode: cmdArgs[0] as AgentMode } };
+            saveConfig(updated);
+            return updated;
+          });
           setMessages(prev => [...prev, {
             role: 'assistant',
-            content: `Switched to **${cmdArgs[0]}** mode.`,
+            content: `🔄 已切换到 **${cmdArgs[0]}** 模式`,
           }]);
         }
         break;
 
+      case 'save':
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '💾 会话已自动保存',
+        }]);
+        break;
+
+      case 'list': {
+        const allSessions = sessionManager.current.listSessions(20);
+        if (allSessions.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '📭 暂无历史会话' }]);
+        } else {
+          const lines = allSessions.map((s, i) => {
+            const date = new Date(s.updated_at).toLocaleString();
+            const current = s.id === sessionManager.current.current?.id ? ' ← 当前' : '';
+            return `${i + 1}. **${s.name}** [${s.model}] ${date}${current}`;
+          }).join('\n');
+          setMessages(prev => [...prev, { role: 'assistant', content: `📂 **会话列表** (${allSessions.length} 个)\n${lines}\n\n用 \`Ctrl+R\` 切换会话` }]);
+        }
+        break;
+      }
+
       case 'model':
         if (cmdArgs[0]) {
-          setConfig(prev => ({ ...prev, provider: { ...prev.provider, model: cmdArgs[0] } }));
+          setConfig(prev => {
+            const updated = { ...prev, provider: { ...prev.provider, model: cmdArgs[0] } };
+            saveConfig(updated);
+            return updated;
+          });
           setMessages(prev => [...prev, {
             role: 'assistant',
-            content: `Switched model to **${cmdArgs[0]}**.`,
+            content: `🔄 已切换模型为 **${cmdArgs[0]}**`,
           }]);
         }
         break;
@@ -212,12 +356,10 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             return updated;
           });
         }).then(({ compacted, savedTokens }) => {
-          setMessages(compacted);
-          if (savedTokens > 0) {
-            setMessages(prev => [...prev, { role: 'assistant', content: `✅ 上下文已压缩，节省约 ${savedTokens} tokens` }]);
-          } else {
-            setMessages(prev => [...prev, { role: 'assistant', content: '✅ 上下文无需压缩' }]);
-          }
+          const statusMsg = savedTokens > 0
+            ? `✅ 上下文已压缩，节省约 ${savedTokens} tokens`
+            : '✅ 上下文无需压缩';
+          setMessages([...compacted, { role: 'assistant', content: statusMsg }]);
         }).catch(() => {
           setMessages(prev => [...prev, { role: 'assistant', content: '❌ 上下文压缩失败' }]);
         });
@@ -231,33 +373,38 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       // ===== 新增命令 =====
 
       case 'retry':
-        // 重试上一条用户消息
-        if (messagesRef.current.length >= 1) {
-          const lastUserMsg = [...messagesRef.current].reverse().find(m => m.role === 'user');
-          if (lastUserMsg) {
-            // 移除最后的 assistant 回复
-            const filtered = messagesRef.current.filter((m, i) => {
-              if (m.role === 'assistant' && i === messagesRef.current.length - 1) return false;
-              return true;
-            });
-            setMessages(filtered);
-            // 重新提交
-            setTimeout(() => handleSubmit(lastUserMsg.content || ''), 100);
+        // 重试上一条用户消息：移除最后一个 user 消息之后的所有内容，重新提交
+        {
+          const msgs = messagesRef.current;
+          let lastUserIdx = -1;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'user') { lastUserIdx = i; break; }
+          }
+          if (lastUserIdx >= 0) {
+            const userContent = msgs[lastUserIdx].content || '';
+            setMessages(msgs.slice(0, lastUserIdx));
+            setTimeout(() => handleSubmit(userContent), 100);
           }
         }
         break;
 
       case 'undo':
-        // 撤销到上一轮
-        if (messagesRef.current.length >= 2) {
-          // 找到最后一个 user 消息的位置
+        // 撤销到上一轮：找到倒数第二个 user 消息，截断到那里
+        {
+          const msgs = messagesRef.current;
           let lastUserIdx = -1;
-          for (let i = messagesRef.current.length - 1; i >= 0; i--) {
-            if (messagesRef.current[i].role === 'user') { lastUserIdx = i; break; }
+          let secondLastUserIdx = -1;
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'user') {
+              if (lastUserIdx === -1) lastUserIdx = i;
+              else { secondLastUserIdx = i; break; }
+            }
           }
-          if (lastUserIdx > 0) {
-            setMessages(messagesRef.current.slice(0, lastUserIdx));
-            setMessages(prev => [...prev, { role: 'assistant', content: '↩️ 已撤销到上一轮' }]);
+          if (secondLastUserIdx >= 0) {
+            setMessages([...msgs.slice(0, secondLastUserIdx), { role: 'assistant', content: '↩️ 已撤销到上一轮' }]);
+          } else if (lastUserIdx >= 0) {
+            // 只有一条 user 消息，清空所有
+            setMessages([{ role: 'assistant', content: '↩️ 已清空所有对话' }]);
           }
         }
         break;
@@ -293,6 +440,344 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           getRecentCommits(n).then(log => {
             setMessages(prev => [...prev, { role: 'assistant', content: `📜 **最近 ${n} 次提交**\n${log}` }]);
           });
+        } else if (sub === 'commit') {
+          // 自动生成 commit message 并提交
+          getGitDiff().then(diff => {
+            if (!diff || diff.trim() === '') {
+              setMessages(prev => [...prev, { role: 'assistant', content: '📭 没有需要提交的变更' }]);
+              return;
+            }
+            const customMsg = cmdArgs.slice(1).join(' ');
+            if (customMsg) {
+              // 用户指定了 commit message，直接提交
+              handleSubmit(`请用 shell 执行: git add -A && git commit -m "${customMsg}"`);
+            } else {
+              // 让 MiMo 根据 diff 生成 commit message
+              handleSubmit(`请根据以下 git diff 生成一个简洁的中文 commit message（遵循 conventional commits 格式），然后执行 git add -A && git commit:\n\n\`\`\`\n${diff.slice(0, 3000)}\n\`\`\``);
+            }
+          });
+        } else if (sub === 'stash' && cmdArgs[1]) {
+          const stashSub = cmdArgs[1];
+          if (stashSub === 'list') {
+            handleSubmit('请用 shell 执行 git stash list 并展示所有 stash');
+          } else if (stashSub === 'apply') {
+            const n = cmdArgs[2] || '0';
+            handleSubmit(`请用 shell 执行 git stash apply stash@{${n}} 并报告结果`);
+          } else if (stashSub === 'drop') {
+            const n = cmdArgs[2] || '0';
+            handleSubmit(`请用 shell 执行 git stash drop stash@{${n}} 并报告结果`);
+          }
+        } else if (sub === 'stash') {
+          handleSubmit('请用 shell 执行 git stash 并告诉我结果');
+        } else if (sub === 'branch') {
+          handleSubmit('请用 shell 执行 git branch -a 并列出所有分支');
+        } else if (sub === 'pr') {
+          const prSub = cmdArgs[1];
+          if (prSub === 'list') {
+            setMessages(prev => [...prev, { role: 'assistant', content: '📋 正在列出开放的 PR...' }]);
+            handleSubmit('请用 shell 执行 gh pr list --limit 10 并展示结果');
+          } else if (prSub === 'view') {
+            const prNumber = cmdArgs[2];
+            if (!prNumber) {
+              handleSubmit('请用 shell 执行 gh pr view 并展示当前 PR 详情');
+            } else {
+              handleSubmit(`请用 shell 执行 gh pr view ${prNumber} 并展示结果`);
+            }
+          } else if (prSub === 'merge') {
+            const prNumber = cmdArgs[2];
+            if (!prNumber) {
+              setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git pr merge [PR 编号]' }]);
+            } else {
+              setMessages(prev => [...prev, { role: 'assistant', content: `🔀 正在合并 PR #${prNumber} (squash)...` }]);
+              handleSubmit(`请用 shell 执行 gh pr merge ${prNumber} --squash 并报告结果`);
+            }
+          } else {
+            // Default: Generate PR description
+            setMessages(prev => [...prev, { role: 'assistant', content: '🔍 正在分析分支差异...' }]);
+            Promise.all([
+              new Promise<string>((resolve) => {
+                const { execSync: execSyncPr } = require('child_process');
+                try { resolve(execSyncPr('git diff main...HEAD --stat', { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
+              }),
+              new Promise<string>((resolve) => {
+                const { execSync: execSyncDiff } = require('child_process');
+                try { resolve(execSyncDiff('git diff main...HEAD', { encoding: 'utf-8', timeout: 15000 }).slice(0, 6000)); } catch { resolve(''); }
+              }),
+            ]).then(([stat, diff]) => {
+              if (!stat && !diff) {
+                setMessages(prev => [...prev, { role: 'assistant', content: '📭 没有发现与 main 分支的差异' }]);
+                return;
+              }
+              handleSubmit(
+                `请根据以下 Git 分支差异生成一个 PR 标题和描述，包含以下部分：\n` +
+                `1. **变更摘要** - 简要说明本次变更的目的和内容\n` +
+                `2. **修改文件列表** - 列出主要修改的文件\n` +
+                `3. **测试说明** - 建议如何测试这些变更\n` +
+                `4. **破坏性变更** - 如果有破坏性变更请列出，没有则说明无\n\n` +
+                `## 变更统计:\n\`\`\`\n${stat}\n\`\`\`\n\n` +
+                `## 完整差异:\n\`\`\`\n${diff}\n\`\`\``
+              );
+            });
+          }
+        } else if (sub === 'blame') {
+          const blameFile = cmdArgs.slice(1).join(' ');
+          if (!blameFile) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git blame <文件路径>' }]);
+          } else {
+            handleSubmit(`请用 shell 执行 git blame "${blameFile}" 并展示结果`);
+          }
+        } else if (sub === 'conflict') {
+          // Find conflicted files, submit to MiMo for resolution help
+          handleSubmit(
+            '请用 shell 执行 git diff --name-only --diff-filter=U 查找所有有合并冲突的文件，' +
+            '然后读取每个冲突文件的内容，分析冲突标记（<<<<<<< / ======= / >>>>>>>），' +
+            '并为每个文件提供解决冲突的建议。如果有 <<<<<<< 标记的文件，请给出推荐的解决方案。'
+          );
+        } else if (sub === 'compare') {
+          const compareBranch = cmdArgs[1];
+          if (!compareBranch) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git compare <分支名>' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `🔀 正在与 ${compareBranch} 分支对比...` }]);
+            new Promise<string>((resolve) => {
+              const { execSync: execSyncCmp } = require('child_process');
+              try { resolve(execSyncCmp(`git diff ${compareBranch}...HEAD --stat`, { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
+            }).then(stat => {
+              if (!stat || stat.trim() === '') {
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ 当前分支与 ${compareBranch} 没有差异` }]);
+              } else {
+                setMessages(prev => [...prev, { role: 'assistant', content: `🔀 **与 ${compareBranch} 的差异**\n\`\`\`\n${stat}\n\`\`\`` }]);
+              }
+            });
+          }
+        } else if (sub === 'amend') {
+          handleSubmit(
+            '请查看 git diff --staged 的内容和最近一次 commit（git log -1 --format="%s%n%n%b"），' +
+            '如果暂存区有变更则执行 git commit --amend --no-edit，' +
+            '如果没有暂存区变更则提示用户先暂存文件。用中文回复。'
+          );
+        } else if (sub === 'tag') {
+          const tagName = cmdArgs[1];
+          if (!tagName) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git tag <标签名>  (如: v1.0.0)' }]);
+          } else {
+            handleSubmit(`请用 shell 依次执行以下命令：\n1. git tag ${tagName}\n2. git push origin ${tagName}\n\n然后报告结果`);
+          }
+        } else if (sub === 'clean') {
+          // Dry-run first to show what would be deleted, then ask for confirmation
+          handleSubmit(
+            '请先用 shell 执行 git clean -fd --dry-run 展示哪些未跟踪文件会被删除，' +
+            '然后询问用户是否确认执行。如果用户确认，再执行 git clean -fd 删除这些文件。用中文回复。'
+          );
+        } else if (sub === 'bisect') {
+          const goodCommit = cmdArgs[1];
+          const badCommit = cmdArgs[2];
+          if (!goodCommit || !badCommit) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git bisect <good_commit> <bad_commit>' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '🔍 正在启动 git bisect 自动排查...' }]);
+            handleSubmit(
+              '请用 shell 工具执行 git bisect 流程: ' +
+              '1) git bisect start 2) git bisect bad ' + badCommit +
+              ' 3) git bisect good ' + goodCommit +
+              ' 4) 在每个 bisect 步骤运行测试，根据结果执行 git bisect good 或 git bisect bad' +
+              ' 5) 找到引入 bug 的 commit 后执行 git bisect reset。用中文回复。'
+            );
+          }
+        } else if (sub === 'cherry-pick') {
+          const commit = cmdArgs[1];
+          if (!commit) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git cherry-pick <commit>' }]);
+          } else {
+            handleSubmit('请用 shell 执行 git cherry-pick ' + commit + '，如果有冲突则帮助解决。用中文回复。');
+          }
+        } else if (sub === 'rebase') {
+          const rebaseBranch = cmdArgs[1];
+          if (!rebaseBranch) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git rebase <branch>' }]);
+          } else {
+            handleSubmit('请用 shell 执行 git rebase ' + rebaseBranch + '，如果有冲突则帮助解决。用中文回复。');
+          }
+        } else if (sub === 'hook') {
+          const hookType = cmdArgs[1];
+          if (hookType === 'pre-commit') {
+            handleSubmit(
+              '请创建 .git/hooks/pre-commit 文件，内容为运行 lint 和 typecheck 的脚本。如果任一失败则阻止提交。用中文回复。'
+            );
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git hook pre-commit' }]);
+          }
+        } else if (sub === 'undo') {
+          // Undo last git operation: run git reset --soft HEAD~1
+          setMessages(prev => [...prev, { role: 'assistant', content: '⏪ 正在撤销上一次提交...' }]);
+          handleSubmit(
+            '请先用 shell 执行 git reflog -5 展示最近 5 次 git 操作，然后执行 git reset --soft HEAD~1 撤销最近一次提交（保留更改在暂存区）。用中文回复结果。'
+          );
+        } else if (sub === 'sync') {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔄 正在同步远程仓库...' }]);
+          handleSubmit(
+            '请用 shell 依次执行: git fetch --all && git pull --rebase && git push。如果有冲突则帮助解决。用中文回复结果。'
+          );
+        } else if (sub === 'graph') {
+          handleSubmit('请用 shell 执行 git log --oneline --graph --all -20 并展示结果');
+        } else if (sub === 'worktree') {
+          const wtSub = cmdArgs[1] || 'list';
+          if (wtSub === 'list') {
+            handleSubmit('请用 shell 执行 git worktree list 并展示所有工作树');
+          } else if (wtSub === 'add') {
+            const branch = cmdArgs[2];
+            if (!branch) {
+              setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git worktree add <branch>' }]);
+            } else {
+              setMessages(prev => [...prev, { role: 'assistant', content: `🌳 正在创建工作树: ${branch}...` }]);
+              handleSubmit(`请用 shell 执行 git worktree add .worktrees/${branch} ${branch}，然后报告结果。用中文回复。`);
+            }
+          } else if (wtSub === 'remove') {
+            const wtName = cmdArgs[2];
+            if (!wtName) {
+              setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git worktree remove <name>' }]);
+            } else {
+              handleSubmit(`请用 shell 执行 git worktree remove .worktrees/${wtName}，然后报告结果。用中文回复。`);
+            }
+          } else {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: '❓ 用法: /git worktree <list|add|remove> [参数]\n\n  /git worktree list          - 列出所有工作树\n  /git worktree add <branch>  - 创建新工作树\n  /git worktree remove <name> - 移除工作树',
+            }]);
+          }
+        } else if (sub === 'search') {
+          const query = cmdArgs.slice(1).join(' ');
+          if (!query) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git search <搜索词>' }]);
+          } else {
+            handleSubmit(`请用 shell 执行 git log --all --oneline --grep="${query}" -20 并展示结果`);
+          }
+        } else if (sub === 'recent') {
+          handleSubmit('请用 shell 执行 git log --diff-filter=M --name-only --pretty=format: -10 | sort -u 并展示最近修改的文件');
+        } else if (sub === 'contributors') {
+          handleSubmit('请用 shell 执行 git shortlog -sn --all 并展示贡献者列表');
+        } else if (sub === 'release') {
+          const version = cmdArgs[1];
+          if (!version) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git release <version>  (如: v1.0.0)' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `🏷️ 正在创建发布版本: ${version}...` }]);
+            handleSubmit(
+              `请执行: 1) git log --oneline (最近的 commits) 2) 根据 commits 生成 CHANGELOG 3) git tag ${version} 4) git push origin ${version}`
+            );
+          }
+        } else if (sub === 'wip') {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🚧 正在创建 WIP 提交...' }]);
+          handleSubmit('请用 shell 执行 git add -A && git commit -m "WIP: work in progress"，然后报告结果');
+        } else if (sub === 'issue') {
+          const issueTitle = cmdArgs.slice(1).join(' ');
+          if (!issueTitle) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git issue <标题>' }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `📝 正在创建 GitHub Issue: ${issueTitle}...` }]);
+            handleSubmit(`请用 shell 执行: gh issue create --title '${issueTitle}' --body '(由 MiMo TUI 自动创建)'`);
+          }
+        } else if (sub === 'ci') {
+          const ciSub = cmdArgs[1];
+          if (ciSub === 'logs') {
+            setMessages(prev => [...prev, { role: 'assistant', content: '📋 正在获取最新 CI 日志...' }]);
+            handleSubmit('请用 shell 执行 gh run view --log 并展示结果');
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '🔄 正在检查 CI 状态...' }]);
+            handleSubmit('请用 shell 执行 gh run list --limit 5 并展示结果');
+          }
+        } else if (sub === 'stats') {
+          setMessages(prev => [...prev, { role: 'assistant', content: '📊 正在统计 Git 数据...' }]);
+          Promise.all([
+            new Promise<string>((resolve) => {
+              const { execSync: execSyncStats } = require('child_process');
+              try {
+                resolve(execSyncStats(
+                  'git log --shortstat --since="1 month ago" | grep "files changed" | awk \'{files+=$1; ins+=$4; del+=$6} END {print "月度统计: 修改 "files" 文件, 新增 "ins" 行, 删除 "del" 行"}\'',
+                  { encoding: 'utf-8', timeout: 15000, shell: 'bash' }
+                ).trim());
+              } catch { resolve(''); }
+            }),
+            new Promise<string>((resolve) => {
+              const { execSync: execSyncAuthors } = require('child_process');
+              try {
+                resolve(execSyncAuthors(
+                  'git shortlog -sn --since="1 month ago"',
+                  { encoding: 'utf-8', timeout: 10000 }
+                ).trim());
+              } catch { resolve(''); }
+            }),
+          ]).then(([monthlyStats, authorStats]) => {
+            const msg = [
+              `📊 **Git 月度统计**`,
+              ``,
+              monthlyStats || '暂无月度数据',
+              ``,
+              `**本月活跃贡献者**`,
+              authorStats || '暂无贡献者数据',
+            ].join('\n');
+            setMessages(prev => {
+              const updated = [...prev];
+              updated[updated.length - 1] = { role: 'assistant', content: msg };
+              return updated;
+            });
+          });
+        } else if (sub === 'authors') {
+          handleSubmit('请用 shell 执行 git shortlog -sn --all 并展示所有作者及提交次数');
+        } else if (sub === 'churn') {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔄 正在分析文件变更频率...' }]);
+          handleSubmit('请用 shell 执行 git log --pretty=format: --name-only | sort | uniq -c | sort -rn | head -20 并展示结果');
+        } else if (sub === 'timeline') {
+          const timelineFile = cmdArgs.slice(1).join(' ');
+          if (!timelineFile) {
+            setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git timeline <文件路径>' }]);
+          } else {
+            handleSubmit(`请用 shell 执行 git log --oneline --follow -20 -- "${timelineFile}" 并展示结果`);
+          }
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: [
+              '❓ 未知的 git 子命令。可用命令:',
+              '  /git status   - 查看 Git 状态',
+              '  /git diff     - 查看工作区差异',
+              '  /git log [n]  - 查看最近 n 次提交',
+              '  /git commit   - 智能提交',
+              '  /git stash    - 暂存工作区',
+              '  /git branch   - 查看所有分支',
+              '  /git pr       - 生成 PR 描述',
+              '  /git pr list  - 列出开放的 PR',
+              '  /git pr view [n] - 查看 PR 详情',
+              '  /git pr merge [n] - 合并 PR (squash)',
+              '  /git issue <title> - 创建 GitHub Issue',
+              '  /git ci       - 查看 CI 状态',
+              '  /git ci logs  - 查看最新 CI 日志',
+              '  /git blame <file> - 查看文件修改历史',
+              '  /git conflict - 帮助解决合并冲突',
+              '  /git compare <branch> - 对比分支差异',
+              '  /git amend    - 修改最近一次提交',
+              '  /git tag <name> - 创建并推送标签',
+              '  /git clean    - 清理未跟踪文件',
+              '  /git bisect <good> <bad> - 自动排查 bug',
+              '  /git cherry-pick <commit> - 摘取提交',
+              '  /git rebase <branch> - 变基',
+              '  /git hook pre-commit - 设置 pre-commit 钩子',
+              '  /git undo     - 撤销上一次提交',
+              '  /git sync     - 同步远程仓库',
+              '  /git graph    - 可视化提交图',
+              '  /git worktree <list|add|remove> - 工作树管理',
+              '  /git stash <list|apply|drop> - Stash 管理',
+              '  /git search <query> - 搜索提交信息',
+              '  /git recent   - 最近修改的文件',
+              '  /git contributors - 贡献者列表',
+              '  /git release <version> - 创建发布版本',
+              '  /git wip      - 快速 WIP 提交',
+              '  /git stats    - 月度 Git 统计',
+              '  /git authors  - 所有作者及提交次数',
+              '  /git churn    - 文件变更频率排名',
+              '  /git timeline <file> - 文件提交时间线',
+            ].join('\n'),
+          }]);
         }
         break;
       }
@@ -343,7 +828,11 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       case 'theme': {
         const themeName = cmdArgs[0];
         if (themeName && ['default', 'whale', 'matrix', 'dracula', 'solarized'].includes(themeName)) {
-          setConfig(prev => ({ ...prev, ui: { ...prev.ui, theme: themeName } }));
+          setConfig(prev => {
+            const updated = { ...prev, ui: { ...prev.ui, theme: themeName } };
+            saveConfig(updated);
+            return updated;
+          });
           setMessages(prev => [...prev, { role: 'assistant', content: `🎨 主题已切换为: **${themeName}**` }]);
         } else {
           setMessages(prev => [...prev, {
@@ -355,6 +844,28 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       }
 
       case 'debug': {
+        if (cmdArgs[0] === 'agents') {
+          const sam = subAgentManager.current;
+          const allTasks = sam.getAllTasks();
+          const wf = activeWorkflow.current;
+          const agentInfo = [
+            `🤖 **智能体能力状态**`,
+            ``,
+            `**子代理管理器**`,
+            `  运行中: ${sam.runningCount}`,
+            `  排队中: ${sam.pendingCount}`,
+            `  已生成: ${allTasks.length}`,
+            ``,
+            `**文件监控**: ${fileWatcher.current.isWatching ? '运行中' : '未启用'}`,
+            `**自动提交**: ${autoCommit.current ? '开启' : '关闭'}`,
+            `**自动测试**: ${autoTest.current ? '开启' : '关闭'}`,
+            ``,
+            `**活跃工作流**: ${wf ? `${wf.workflow.name} (步骤 ${wf.stepIndex + 1}/${wf.workflow.steps.length})` : '无'}`,
+          ].join('\n');
+          setMessages(prev => [...prev, { role: 'assistant', content: agentInfo }]);
+          break;
+        }
+        const toolNames = toolRegistry.current.allToolNames;
         const debugInfo = [
           `🐛 **调试信息**`,
           `Node: ${process.version}`,
@@ -365,8 +876,54 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           `模式: ${modeRef.current}`,
           `消息数: ${messagesRef.current.length}`,
           `内存: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
+          ``,
+          `**已注册工具** (${toolNames.length} 个)`,
+          `  ${toolNames.join(', ')}`,
+          ``,
+          `**子命令**: \`/debug agents\` 查看智能体能力状态`,
         ].join('\n');
         setMessages(prev => [...prev, { role: 'assistant', content: debugInfo }]);
+        break;
+      }
+
+      case 'cd': {
+        const target = cmdArgs.join(' ');
+        if (!target) {
+          setMessages(prev => [...prev, { role: 'assistant', content: `📁 当前目录: \`${process.cwd()}\`\n用法: \`/cd <路径>\`` }]);
+          break;
+        }
+        try {
+          const resolved = path.resolve(process.cwd(), target);
+          if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 目录不存在: ${target}` }]);
+            break;
+          }
+          process.chdir(resolved);
+          sandbox.current = new Sandbox(resolved);
+          setMessages(prev => [...prev, { role: 'assistant', content: `📁 已切换到: \`${resolved}\`` }]);
+        } catch (e) {
+          setMessages(prev => [...prev, { role: 'assistant', content: `❌ 切换目录失败: ${e instanceof Error ? e.message : String(e)}` }]);
+        }
+        break;
+      }
+
+      case 'think': {
+        const level = cmdArgs[0];
+        if (level && ['low', 'medium', 'high', 'auto'].includes(level)) {
+          setConfig(prev => {
+            const updated = { ...prev, agent: { ...prev.agent, reasoningEffort: level as 'low' | 'medium' | 'high' } };
+            saveConfig(updated);
+            return updated;
+          });
+          const labels: Record<string, string> = { low: '快速 (5K tokens)', medium: '平衡 (10K tokens)', high: '深度 (20K tokens)', auto: '自动 (根据任务调整)' };
+          setMessages(prev => [...prev, { role: 'assistant', content: `🧠 推理深度: **${labels[level]}**` }]);
+        } else {
+          const current = configRef.current.agent.reasoningEffort;
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `🧠 **推理深度设置**\n\n当前: **${current}**\n\n- \`low\` 快速推理 (5K tokens) - 简单问答\n- \`medium\` 平衡 (10K tokens) - 日常开发\n- \`high\` 深度推理 (20K tokens) - 复杂调试\n- \`auto\` 自动调整\n\n用法: \`/think <级别>\``,
+          }]);
+        }
         break;
       }
 
@@ -383,6 +940,109 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             return updated;
           });
         });
+        break;
+      }
+
+      case 'doctor': {
+        setMessages(prev => [...prev, { role: 'assistant', content: '🏥 正在诊断...' }]);
+        const cfg = configRef.current;
+        const checks: string[] = [];
+
+        // 1. 配置检查
+        checks.push(`**配置**`);
+        checks.push(`  API 密钥: ${cfg.provider.apiKey ? `✅ 已设置 (${cfg.provider.apiKey.slice(0, 8)}...)` : '❌ 未设置'}`);
+        checks.push(`  API 地址: ${cfg.provider.baseUrl}`);
+        checks.push(`  模型: ${cfg.provider.model}`);
+        checks.push(`  模式: ${cfg.agent.mode}`);
+        checks.push(`  推理深度: ${cfg.agent.reasoningEffort}`);
+
+        // 2. 工具注册检查
+        const toolNames = toolRegistry.current.allToolNames;
+        const expectedTools = ['read_file', 'write_file', 'edit_file', 'shell', 'glob', 'grep', 'web_fetch', 'todo', 'codebase', 'test_runner', 'multi_edit'];
+        const missingTools = expectedTools.filter(t => !toolNames.includes(t));
+        checks.push(`\n**工具** (${toolNames.length} 个)`);
+        checks.push(`  ${missingTools.length === 0 ? '✅ 全部就绪' : `❌ 缺少: ${missingTools.join(', ')}`}`);
+
+        // 3. 会话检查
+        const sessionCount = sessionManager.current.listSessions(100).length;
+        const currentSession = sessionManager.current.current;
+        checks.push(`\n**会话**`);
+        checks.push(`  当前: ${currentSession ? `✅ ${currentSession.name}` : '❌ 无'}`);
+        checks.push(`  历史: ${sessionCount} 个`);
+
+        // 4. 缓存检查
+        const u = usage;
+        const cacheTotal = u.cacheHitTokens + u.cacheMissTokens;
+        const cacheRate = cacheTotal > 0 ? Math.round((u.cacheHitTokens / cacheTotal) * 100) : 0;
+        checks.push(`\n**缓存**`);
+        checks.push(`  命中率: ${cacheRate}% ${cacheRate >= 60 ? '✅' : cacheRate >= 30 ? '⚠️' : '❌ (首轮正常)'}`);
+
+        // 5. 运行环境
+        checks.push(`\n**环境**`);
+        checks.push(`  Node: ${process.version}`);
+        checks.push(`  平台: ${process.platform} ${process.arch}`);
+        checks.push(`  工作目录: ${process.cwd()}`);
+        checks.push(`  内存: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
+
+        // 6. API 连接测试
+        checkApiHealth(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model).then(result => {
+          checks.push(`\n**API 连接**`);
+          if (result.ok) {
+            checks.push(`  ✅ 连接正常`);
+            checks.push(`  延迟: ${result.latencyMs}ms`);
+            if (result.usage) {
+              const r = result.usage;
+              checks.push(`  缓存: 命中 ${r.cacheHitTokens} | 未命中 ${r.cacheMissTokens}`);
+            }
+          } else {
+            checks.push(`  ❌ 连接失败: ${result.error}`);
+            // 恢复建议
+            if (result.error?.includes('401') || result.error?.includes('Unauthorized')) {
+              checks.push(`  💡 API 密钥无效，请运行 \`/config\` 检查或重新 \`--setup\``);
+            } else if (result.error?.includes('404')) {
+              checks.push(`  💡 API 端点不存在，检查 base_url 是否正确`);
+            } else if (result.error?.includes('timeout') || result.error?.includes('ECONNREFUSED')) {
+              checks.push(`  💡 网络连接失败，检查网络或 API 地址`);
+            }
+          }
+
+          const summary = checks.join('\n');
+          setMessages(prev => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: 'assistant', content: `🏥 **诊断报告**\n\n${summary}` };
+            return updated;
+          });
+        });
+        break;
+      }
+
+      case 'fix': {
+        const hasFile = (f: string) => { try { return fs.existsSync(path.join(process.cwd(), f)); } catch { return false; } };
+        const hasScript = (name: string) => {
+          try {
+            const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'));
+            return !!(pkg.scripts?.[name]);
+          } catch { return false; }
+        };
+
+        const fixes: Array<{ name: string; cmd: string }> = [];
+
+        if (hasScript('lint')) fixes.push({ name: 'Lint', cmd: 'npm run lint -- --fix 2>&1 || true' });
+        else if (hasFile('.eslintrc.js') || hasFile('.eslintrc.json') || hasFile('eslint.config.js')) fixes.push({ name: 'Lint', cmd: 'npx eslint . --fix 2>&1 || true' });
+
+        if (hasScript('format')) fixes.push({ name: 'Format', cmd: 'npm run format 2>&1 || true' });
+        else if (hasFile('.prettierrc') || hasFile('.prettierrc.json')) fixes.push({ name: 'Format', cmd: 'npx prettier --write . 2>&1 || true' });
+
+        if (hasFile('tsconfig.json')) fixes.push({ name: 'TypeCheck', cmd: 'npx tsc --noEmit 2>&1' });
+
+        if (fixes.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔧 未检测到可修复工具 (eslint/prettier/tsc)\n用法: `/fix` 自动检测并执行' }]);
+        } else {
+          const summary = fixes.map(f => `  ${f.name}: \`${f.cmd}\``).join('\n');
+          setMessages(prev => [...prev, { role: 'assistant', content: `🔧 执行 ${fixes.length} 项修复:\n${summary}\n\n正在执行...` }]);
+          // 依次执行所有修复命令
+          handleSubmit(`请用 shell 工具依次执行以下命令并报告结果:\n${fixes.map(f => f.cmd).join('\n')}`);
+        }
         break;
       }
 
@@ -520,6 +1180,17 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
 
       case 'config':
       case 'cfg': {
+        const cfgSub = cmdArgs[0];
+        if (cfgSub === 'edit') {
+          handleSubmit('请用 read_file 读取 ~/.mimo/config.toml 的内容，然后展示给用户。告诉用户可以直接修改配置文件。');
+          break;
+        }
+        if (cfgSub === 'reset') {
+          saveConfig(DEFAULT_CONFIG);
+          setConfig(DEFAULT_CONFIG);
+          setMessages(prev => [...prev, { role: 'assistant', content: '⚙️ 配置已重置为默认值' }]);
+          break;
+        }
         const cfg = configRef.current;
         const msg = [
           `⚙️ **当前配置**`,
@@ -542,6 +1213,8 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           `  显示 Token: ${cfg.ui.showTokens ? '是' : '否'}`,
           ``,
           `配置文件: \`~/.mimo/config.toml\``,
+          ``,
+          `**子命令**: \`/config edit\` 编辑配置 · \`/config reset\` 重置为默认`,
         ].join('\n');
         setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
         break;
@@ -570,15 +1243,60 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           ? Math.round(messagesRef.current.filter(m => m.role === 'assistant').reduce((s, m) => s + (m.content?.length || 0), 0) / assistantMsgs)
           : 0;
 
+        const cacheTotal = u.cacheHitTokens + u.cacheMissTokens;
+        const cacheRate = cacheTotal > 0 ? Math.round((u.cacheHitTokens / cacheTotal) * 100) : 0;
+        const cacheBar = '█'.repeat(Math.round(cacheRate / 5)) + '░'.repeat(20 - Math.round(cacheRate / 5));
+
         const msg = [
           `📊 **会话统计**`,
           ``,
-          `消息总数: ${msgCount}`,
-          `  用户: ${userMsgs} | 助手: ${assistantMsgs} | 工具: ${toolMsgs}`,
-          `平均回复长度: ${avgResponseLen} 字符`,
-          `Token 使用: ${u.totalTokens.toLocaleString()}`,
-          `  缓存命中率: ${u.totalTokens > 0 ? Math.round((u.cacheHitTokens / (u.cacheHitTokens + u.cacheMissTokens)) * 100) : 0}%`,
-        ].join('\n');
+          `消息: ${msgCount} 条 (用户 ${userMsgs} | 助手 ${assistantMsgs} | 工具 ${toolMsgs})`,
+          `平均回复: ${avgResponseLen} 字符`,
+          ``,
+          `**Token 用量**`,
+          `  总计: ${u.totalTokens.toLocaleString()}`,
+          `  输入: ${u.promptTokens.toLocaleString()} | 输出: ${u.completionTokens.toLocaleString()}`,
+          ``,
+          `**缓存命中率**: ${cacheRate}% ${cacheRate >= 60 ? '✅' : cacheRate >= 30 ? '⚠️' : '❌'}`,
+          `  \`${cacheBar}\``,
+          `  命中: ${u.cacheHitTokens.toLocaleString()} | 未命中: ${u.cacheMissTokens.toLocaleString()}`,
+          cacheRate < 30 ? `\n💡 提示: 多轮对话后缓存命中率会自动提升。首轮最低。` : '',
+        ].filter(Boolean).join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        break;
+      }
+
+      case 'context': {
+        const msgs = messagesRef.current.filter(m => m.role !== 'system');
+        const totalChars = msgs.reduce((s, m) => s + (m.content?.length || 0), 0);
+        const toolCallCount = msgs.reduce((s, m) => s + (m.tool_calls?.length || 0), 0);
+        const memoryCtx = memoryStore.current.getContextSummary();
+        const projectInfo = detectProject();
+        const sysLen = systemPrompt.current.length + (memoryCtx?.length || 0);
+
+        const breakdown = msgs.map((m, i) => {
+          const len = (m.content?.length || 0);
+          const tools = m.tool_calls?.length || 0;
+          const label = m.role === 'user' ? '👤' : m.role === 'assistant' ? '🤖' : '🔧';
+          const preview = (m.content || '').slice(0, 40).replace(/\n/g, ' ');
+          return `  ${label} ${i}: ${len}字符${tools > 0 ? ` +${tools}工具` : ''}  "${preview}..."`;
+        }).join('\n');
+
+        const msg = [
+          `📋 **上下文详情**`,
+          ``,
+          `**系统提示词**: ${sysLen} 字符`,
+          `  项目: ${projectInfo.name} (${projectInfo.language})`,
+          memoryCtx ? `  记忆: ${memoryCtx.length} 字符` : '',
+          ``,
+          `**对话消息**: ${msgs.length} 条`,
+          `  总字符: ${totalChars.toLocaleString()}`,
+          `  工具调用: ${toolCallCount} 次`,
+          `  预估 Token: ~${Math.round(totalChars * 1.5).toLocaleString()}`,
+          ``,
+          `**消息明细** (最近 15 条)`,
+          breakdown.split('\n').slice(-15).join('\n'),
+        ].filter(Boolean).join('\n');
         setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
         break;
       }
@@ -593,9 +1311,10 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           `\`Ctrl+Z\` 撤销        \`Ctrl+C\` 取消/退出`,
           `\`Alt+1\` 计划模式     \`Alt+2\` 智能体模式`,
           `\`Alt+3\` 自动模式     \`?\` 帮助`,
-          `\`Enter\` 发送         \`Esc\` 关闭弹窗`,
+          `\`Enter\` 发送         \`Shift+Enter\` 换行`,
+          `\`Tab\` 补全命令       \`Esc\` 关闭弹窗`,
           `\`↑/↓\` 历史记录      \`Ctrl+U\` 清空行`,
-          `\`Ctrl+A\` 行首        \`Ctrl+E\` 行尾`,
+          `\`Ctrl+A/E\` 行首/行尾`,
         ].join('\n');
         setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
         break;
@@ -650,30 +1369,109 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         const sub = cmdArgs[0] || 'list';
         if (sub === 'list') {
           const lines = ['⚡ **工作流**\n'];
+          const userWfs = loadUserWorkflows();
+          if (userWfs.length > 0) {
+            lines.push('**自定义工作流** (来自 .mimo/workflows.json)');
+            for (const wf of userWfs) {
+              lines.push(`\`${wf.id}\` **${wf.name}** - ${wf.description}`);
+              lines.push(`  步骤: ${wf.steps.map(s => s.name).join(' → ')}`);
+            }
+            lines.push('');
+          }
+          lines.push('**内置工作流**');
           for (const wf of BUILTIN_WORKFLOWS) {
             lines.push(`\`${wf.id}\` **${wf.name}** - ${wf.description}`);
             lines.push(`  步骤: ${wf.steps.map(s => s.name).join(' → ')}`);
           }
-          lines.push('\n用法: `/wf <id>` 执行工作流');
+          lines.push('\n用法: `/wf <id>` 执行工作流 · `/wf stop` 停止');
           setMessages(prev => [...prev, { role: 'assistant', content: lines.join('\n') }]);
+        } else if (sub === 'stop') {
+          if (activeWorkflow.current) {
+            const wfName = activeWorkflow.current.workflow.name;
+            activeWorkflow.current = null;
+            setMessages(prev => [...prev, { role: 'assistant', content: `⏹️ 工作流 "${wfName}" 已停止` }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: '没有正在运行的工作流' }]);
+          }
         } else if (sub === 'search') {
           const query = cmdArgs.slice(1).join(' ');
           const results = searchWorkflows(query);
           const list = results.map(w => `\`${w.id}\` ${w.name}: ${w.description}`).join('\n');
           setMessages(prev => [...prev, { role: 'assistant', content: list || '未找到匹配的工作流' }]);
         } else {
-          const wf = BUILTIN_WORKFLOWS.find(w => w.id === sub);
+          // Check user-defined workflows first, then built-in
+          const userWfs = loadUserWorkflows();
+          const wf = userWfs.find(w => w.id === sub) || BUILTIN_WORKFLOWS.find(w => w.id === sub);
           if (wf) {
-            // 执行工作流：依次提交每一步的提示词
+            activeWorkflow.current = { workflow: wf, stepIndex: 0 };
             setMessages(prev => [...prev, {
               role: 'assistant',
-              content: `⚡ 执行工作流: **${wf.name}**\n步骤: ${wf.steps.map(s => s.name).join(' → ')}\n\n开始第一步: ${wf.steps[0].name}`,
+              content: `⚡ 执行工作流: **${wf.name}**\n步骤: ${wf.steps.map(s => s.name).join(' → ')}\n\n开始第 1/${wf.steps.length} 步: ${wf.steps[0].name}`,
             }]);
-            // 自动提交第一步
             setTimeout(() => handleSubmit(wf.steps[0].prompt), 500);
           } else {
             setMessages(prev => [...prev, { role: 'assistant', content: `❓ 工作流 "${sub}" 不存在。输入 \`/wf\` 查看所有工作流` }]);
           }
+        }
+        break;
+      }
+
+      // ===== 终止所有任务 =====
+      case 'kill': {
+        const stopped: string[] = [];
+
+        // Stop active workflow
+        if (activeWorkflow.current) {
+          stopped.push(`工作流: ${activeWorkflow.current.workflow.name}`);
+          activeWorkflow.current = null;
+        }
+
+        // Abort current agent loop
+        if (agentLoop.current) {
+          agentLoop.current.abort();
+          stopped.push('当前 AI 对话');
+        }
+
+        // Stop file watcher
+        fileWatcher.current.stop();
+        stopped.push('文件监控');
+
+        // Reset streaming state
+        setIsStreaming(false);
+        setIsThinking(false);
+        if (streamTimerRef.current) {
+          clearInterval(streamTimerRef.current);
+          streamTimerRef.current = null;
+        }
+
+        if (stopped.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🛑 没有正在运行的任务' }]);
+        } else {
+          setMessages(prev => [...prev, { role: 'assistant', content: `🛑 已停止:\n${stopped.map(s => `  • ${s}`).join('\n')}` }]);
+        }
+        break;
+      }
+
+      // ===== 清理命令 =====
+      case 'clean': {
+        const sub = cmdArgs[0];
+        if (sub === 'sessions') {
+          // Delete old sessions (older than 7 days)
+          const sessions = sessionManager.current.listSessions(100);
+          const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          let cleaned = 0;
+          for (const s of sessions) {
+            if (new Date(s.updated_at).getTime() < weekAgo) {
+              sessionManager.current.deleteSession(s.id);
+              cleaned++;
+            }
+          }
+          setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ 清理了 ${cleaned} 个超过 7 天的会话` }]);
+        } else if (sub === 'memory') {
+          memoryStore.current.clear();
+          setMessages(prev => [...prev, { role: 'assistant', content: '🧠 已清空所有记忆' }]);
+        } else {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🗑️ **清理命令**\n\n`/clean sessions` - 清理超过 7 天的旧会话\n`/clean memory` - 清空所有记忆' }]);
         }
         break;
       }
@@ -701,12 +1499,26 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             setFileChanges(fileWatcher.current.getSummary());
           });
           setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 开始监控文件变更...' }]);
+        } else if (sub === 'test') {
+          // 文件变更时自动跑测试
+          fileWatcher.current.watch(process.cwd(), (change) => {
+            setFileChanges(fileWatcher.current.getSummary());
+            // 防抖：只在停止修改 2 秒后触发
+            const timer = setTimeout(() => {
+              setMessages(prev => [...prev, { role: 'assistant', content: `🔄 检测到文件变更，自动运行测试...` }]);
+              handleSubmit('请用 test_runner 工具运行项目测试，只报告失败的测试。如果全部通过，只说"✅ 测试通过"。');
+            }, 2000);
+            // 用 ref 存 timer 以便取消
+            (fileWatcher as any)._testTimer = timer;
+          });
+          setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 文件变更自动测试已启动\n修改文件后 2 秒自动运行测试\n`/watch stop` 停止' }]);
         } else if (sub === 'stop') {
+          if ((fileWatcher as any)._testTimer) clearTimeout((fileWatcher as any)._testTimer);
           fileWatcher.current.stop();
           setMessages(prev => [...prev, { role: 'assistant', content: '👁️ 已停止文件监控' }]);
         } else {
           const summary = fileWatcher.current.getSummary();
-          setMessages(prev => [...prev, { role: 'assistant', content: `👁️ **文件变更**\n${summary}` }]);
+          setMessages(prev => [...prev, { role: 'assistant', content: `👁️ **文件变更**\n${summary}\n\n\`/watch start\` 监控 · \`/watch test\` 自动测试 · \`/watch stop\` 停止` }]);
         }
         break;
       }
@@ -722,6 +1534,269 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             setTimeout(() => handleSlashCommand(cmd.startsWith('/') ? cmd : `/${cmd}`), i * 200);
           });
         }
+        break;
+      }
+
+      case 'improve': {
+        const target = cmdArgs.join(' ');
+        const prompt = target
+          ? `请分析文件 ${target} 的代码质量，找出问题并给出具体改进建议。用 read_file 读取文件，然后逐项分析。`
+          : '请分析当前项目的代码质量：1) 用 codebase action=index 了解项目结构 2) 检查是否有未使用的依赖 3) 检查是否有缺少的类型注解 4) 检查是否有可以提取的重复代码 5) 检查测试覆盖率。给出具体改进建议，包含文件路径和行号。';
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在分析${target ? ` ${target}` : '项目'}...` }]);
+        setTimeout(() => handleSubmit(prompt), 100);
+        break;
+      }
+
+      case 'batch': {
+        const commands = cmdArgs.join(' ');
+        if (!commands) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '📦 用法: `/batch npm test && npm run build && git status`' }]);
+          break;
+        }
+        // Submit to MiMo with instructions to run each command
+        const prompt = `请依次执行以下命令，每条命令用 shell 工具执行，如果某条命令失败则停止并报告错误:\n\n${commands.split('&&').map((c, i) => `${i + 1}. ${c.trim()}`).join('\n')}`;
+        setMessages(prev => [...prev, { role: 'assistant', content: `📦 批量执行 ${commands.split('&&').length} 条命令...` }]);
+        setTimeout(() => handleSubmit(prompt), 100);
+        break;
+      }
+
+      case 'sub': {
+        const taskName = cmdArgs[0] || 'background-task';
+        const taskPrompt = cmdArgs.slice(1).join(' ');
+        if (!taskPrompt) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔀 用法: `/sub <名称> <任务描述>`\n示例: `/sub test-check 检查所有测试是否通过`' }]);
+          break;
+        }
+        const cfg = configRef.current;
+        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔀 后台任务 **${taskName}** 已启动` }]);
+        subAgentManager.current.spawn(taskName, taskPrompt, client, toolRegistry.current, toolCtx, modeRef.current, (task) => {
+          const status = task.status === 'completed' ? '✅' : '❌';
+          const content = task.result || task.error || '无结果';
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `${status} 后台任务 **${taskName}** 已完成\n\n${content.slice(0, 500)}`,
+          }]);
+        });
+        break;
+      }
+
+      case 'tips': {
+        const u = usage;
+        const cacheTotal = u.cacheHitTokens + u.cacheMissTokens;
+        const cacheRate = cacheTotal > 0 ? Math.round((u.cacheHitTokens / cacheTotal) * 100) : 0;
+        const sessionCost = calculateCost(configRef.current.provider.model, u.promptTokens, u.completionTokens, u.cacheHitTokens);
+        const tips: string[] = [];
+
+        if (cacheRate < 30 && cacheTotal > 1000) {
+          tips.push('💡 **缓存命中率低** — 多轮对话后会自动提升。首轮最低是正常的。');
+        }
+        if (u.completionTokens > u.promptTokens * 2) {
+          tips.push('💡 **输出 Token 过多** — 试试 `/think low` 降低推理深度，或用更简洁的提问方式。');
+        }
+        if (configRef.current.provider.model.includes('pro') && sessionCost > 0.1) {
+          tips.push('💡 **费用较高** — 简单任务可以用 `/model mimo-v2.5-flash` 切换到 Flash 模型（更便宜）。');
+        }
+        if (messagesRef.current.length > 50) {
+          tips.push('💡 **对话较长** — 试试 `/compact` 压缩上下文，或 `/new` 开始新会话。');
+        }
+        if (tips.length === 0) {
+          tips.push('✅ 当前使用情况良好，没有特别的优化建议。');
+        }
+
+        const msg = [
+          `💡 **费用优化建议**`,
+          ``,
+          `当前: ${configRef.current.provider.model} | 费用: $${sessionCost.toFixed(4)} | 缓存: ${cacheRate}%`,
+          ``,
+          ...tips,
+        ].join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
+        break;
+      }
+
+      // ===== 自动化工作流 =====
+      case 'auto': {
+        const sub = cmdArgs[0];
+        if (sub === 'commit') {
+          autoCommit.current = !autoCommit.current;
+          setMessages(prev => [...prev, { role: 'assistant', content: autoCommit.current ? '🔄 自动提交已开启 - 每次对话完成后自动 git commit' : '🔄 自动提交已关闭' }]);
+        } else if (sub === 'test') {
+          autoTest.current = !autoTest.current;
+          if (autoTest.current) {
+            fileWatcher.current.watch(process.cwd(), () => {
+              handleSubmit('请用 test_runner 运行测试，只报告失败项');
+            });
+            setMessages(prev => [...prev, { role: 'assistant', content: '🧪 自动测试已开启 - 文件变更时自动运行测试' }]);
+          } else {
+            fileWatcher.current.stop();
+            setMessages(prev => [...prev, { role: 'assistant', content: '🧪 自动测试已关闭' }]);
+          }
+        } else {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🤖 **自动化工作流**\n\n`/auto commit` - 切换自动提交\n`/auto test` - 切换自动测试\n\n当前状态: ' + (autoCommit.current ? '自动提交 ✅' : '自动提交 ❌') + ' | ' + (autoTest.current ? '自动测试 ✅' : '自动测试 ❌') }]);
+        }
+        break;
+      }
+
+      // ===== 多智能体并行任务 =====
+      case 'parallel': {
+        const tasks = cmdArgs.join(' ').split('|').map(t => t.trim()).filter(Boolean);
+        if (tasks.length < 2) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔀 用法: `/parallel 任务1 | 任务2 | 任务3`\n并行执行多个独立任务' }]);
+          break;
+        }
+        const cfg = configRef.current;
+        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔀 并行执行 ${tasks.length} 个任务...` }]);
+
+        let completed = 0;
+        for (const [i, task] of tasks.entries()) {
+          subAgentManager.current.spawn(`parallel-${i+1}`, task, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
+            completed++;
+            const status = result.status === 'completed' ? '✅' : '❌';
+            setMessages(prev => [...prev, { role: 'assistant', content: `${status} 任务 ${i+1}/${tasks.length}: ${task.slice(0, 30)}...\n${(result.result || result.error || '').slice(0, 300)}` }]);
+            if (completed === tasks.length) {
+              setMessages(prev => [...prev, { role: 'assistant', content: `✅ 全部 ${tasks.length} 个并行任务已完成` }]);
+            }
+          });
+        }
+        break;
+      }
+
+      // ===== 管道式顺序执行 =====
+      case 'pipeline': {
+        const stages = cmdArgs.join(' ').split('->').map(s => s.trim()).filter(Boolean);
+        if (stages.length < 2) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔗 用法: `/pipeline 探索代码 -> 分析问题 -> 生成修复方案`\n任务按顺序执行，前一步的输出作为后一步的输入' }]);
+          break;
+        }
+        const cfg = configRef.current;
+        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
+
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔗 管道执行 ${stages.length} 个阶段:\n${stages.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}` }]);
+
+        // Recursive function to run pipeline stages sequentially
+        const runStage = (stageIndex: number, previousResult: string) => {
+          if (stageIndex >= stages.length) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `✅ 管道全部 ${stages.length} 个阶段已完成` }]);
+            return;
+          }
+          const stagePrompt = stageIndex === 0
+            ? `请执行以下任务:\n${stages[stageIndex]}`
+            : `前一阶段的执行结果:\n${previousResult.slice(0, 2000)}\n\n请基于以上结果，执行以下任务:\n${stages[stageIndex]}`;
+
+          setMessages(prev => [...prev, { role: 'assistant', content: `🔗 正在执行阶段 ${stageIndex + 1}/${stages.length}: ${stages[stageIndex].slice(0, 50)}...` }]);
+
+          subAgentManager.current.spawn(
+            `pipeline-${stageIndex + 1}`,
+            stagePrompt,
+            client,
+            toolRegistry.current,
+            toolCtx,
+            modeRef.current,
+            (result) => {
+              const status = result.status === 'completed' ? '✅' : '❌';
+              const stageResult = result.result || result.error || '无结果';
+              setMessages(prev => [...prev, { role: 'assistant', content: `${status} 阶段 ${stageIndex + 1}/${stages.length} 完成\n${stageResult.slice(0, 300)}` }]);
+              if (result.status === 'completed' && stageIndex + 1 < stages.length) {
+                // Chain next stage with previous result
+                runStage(stageIndex + 1, stageResult);
+              } else if (stageIndex + 1 >= stages.length) {
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ 管道全部 ${stages.length} 个阶段已完成` }]);
+              }
+            }
+          );
+        };
+
+        runStage(0, '');
+        break;
+      }
+
+      case 'explore': {
+        const topic = cmdArgs.join(' ');
+        if (!topic) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '🔍 用法: `/explore <主题>`\n示例: `/explore 错误处理逻辑`' }]);
+          break;
+        }
+        const cfg = configRef.current;
+        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在探索: ${topic}` }]);
+        subAgentManager.current.spawn(`explore-${topic.slice(0, 20)}`, `请用 codebase 和 read_file 工具探索项目，回答以下问题: ${topic}. 只读取和分析，不要修改任何文件。`, client, toolRegistry.current, toolCtx, 'plan', (result) => {
+          const status = result.status === 'completed' ? '✅' : '❌';
+          setMessages(prev => [...prev, { role: 'assistant', content: `${status} 探索完成: ${topic}\n${(result.result || result.error || '').slice(0, 500)}` }]);
+        });
+        break;
+      }
+
+      case 'review': {
+        const target = cmdArgs.join(' ') || '最近的代码变更';
+        const cfg = configRef.current;
+        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在审查: ${target}` }]);
+        subAgentManager.current.spawn(`review-${target.slice(0, 20)}`, `请审查 ${target} 的代码质量。检查: 1) 潜在的 bug 2) 性能问题 3) 安全隐患 4) 代码风格 5) 可改进建议。给出具体的问题描述和修复建议。`, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
+          const status = result.status === 'completed' ? '✅' : '❌';
+          setMessages(prev => [...prev, { role: 'assistant', content: `${status} 代码审查完成: ${target}\n${(result.result || result.error || '').slice(0, 500)}` }]);
+        });
+        break;
+      }
+
+      case 'status': {
+        const allTasks = subAgentManager.current.getAllTasks();
+        if (allTasks.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '📊 没有后台任务' }]);
+          break;
+        }
+        const lines = allTasks.map(t => {
+          const icon = t.status === 'running' ? '🔄' : t.status === 'completed' ? '✅' : '❌';
+          return `${icon} ${t.name} [${t.status}]`;
+        });
+        setMessages(prev => [...prev, { role: 'assistant', content: `📊 **后台任务** (${subAgentManager.current.runningCount} 运行中)\n${lines.join('\n')}` }]);
+        break;
+      }
+
+      // ===== 会话指标 =====
+      case 'metrics': {
+        const u = usage;
+        const sessionCost = calculateCost(configRef.current.provider.model, u.promptTokens, u.completionTokens, u.cacheHitTokens);
+        const cacheTotal = u.cacheHitTokens + u.cacheMissTokens;
+        const cacheRate = cacheTotal > 0 ? Math.round((u.cacheHitTokens / cacheTotal) * 100) : 0;
+
+        // Count tool calls from messages
+        const toolCalls = messagesRef.current.filter(m => m.tool_calls).flatMap(m => m.tool_calls!);
+        const toolCounts = new Map<string, number>();
+        for (const tc of toolCalls) {
+          toolCounts.set(tc.function.name, (toolCounts.get(tc.function.name) || 0) + 1);
+        }
+        const toolBreakdown = [...toolCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) => `  ${name}: ${count} 次`)
+          .join('\n');
+
+        const msg = [
+          `📈 **会话指标**`,
+          ``,
+          `**Token 用量**`,
+          `  输入: ${u.promptTokens.toLocaleString()}`,
+          `  输出: ${u.completionTokens.toLocaleString()}`,
+          `  总计: ${u.totalTokens.toLocaleString()}`,
+          `  缓存命中: ${cacheRate}%`,
+          ``,
+          `**费用**: $${sessionCost.toFixed(4)}`,
+          ``,
+          `**工具调用** (${toolCalls.length} 次)`,
+          toolBreakdown || '  暂无',
+          ``,
+          `**消息统计**`,
+          `  用户: ${messagesRef.current.filter(m => m.role === 'user').length}`,
+          `  助手: ${messagesRef.current.filter(m => m.role === 'assistant').length}`,
+          `  工具: ${messagesRef.current.filter(m => m.role === 'tool').length}`,
+        ].join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: msg }]);
         break;
       }
 
@@ -750,6 +1825,11 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         try {
           const resolved = path.resolve(process.cwd(), filePath);
           if (fs.existsSync(resolved)) {
+            const stat = fs.statSync(resolved);
+            if (stat.size > 100 * 1024) {
+              processedText = processedText.replace(mention, `(文件 ${filePath} 太大: ${(stat.size / 1024).toFixed(0)}KB，已跳过)`);
+              continue;
+            }
             const content = fs.readFileSync(resolved, 'utf-8');
             processedText = processedText.replace(mention, `\n\nFile: ${filePath}\n\`\`\`\n${content}\n\`\`\``);
           }
@@ -792,9 +1872,38 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       gitBranch ? `- Git 分支: ${gitBranch}` : '',
     ].filter(Boolean).join('\n');
 
+    // 智能上下文注入：文件树 + package.json + 相关文件
+    let smartContext = '';
+    if (projectCtx.current) {
+      const ctx = projectCtx.current;
+      const contextParts: string[] = [];
+      if (ctx.fileTree) contextParts.push(`## 项目文件结构\n\`\`\`\n${ctx.fileTree}\n\`\`\``);
+      if (ctx.packageInfo) contextParts.push(`## package.json\n${ctx.packageInfo}`);
+      if (ctx.tsConfig) contextParts.push(`## TypeScript: ${ctx.tsConfig}`);
+      if (ctx.readmeSummary) contextParts.push(`## README 摘要\n${ctx.readmeSummary.slice(0, 300)}`);
+      if (ctx.changedFiles.length > 0) contextParts.push(`## 最近变更文件\n${ctx.changedFiles.map(f => `- ${f}`).join('\n')}`);
+      // 根据用户消息注入相关文件内容
+      const relevantFiles = extractRelevantContext(processedText, process.cwd(), ctx);
+      if (relevantFiles) contextParts.push(`## 相关文件\n${relevantFiles}`);
+      smartContext = contextParts.join('\n\n');
+    }
+
+    // 动态系统提示词: 根据项目类型、对话状态、近期错误实时构建
+    const recentErrors = extractRecentErrors(historyMessages);
+    const toolCallCount = historyMessages.filter(m => m.tool_calls?.length).length;
+    const dynamicSystemPrompt = buildSystemPrompt({
+      projectCtx: projectCtx.current,
+      config: configRef.current,
+      mode: modeRef.current,
+      messageCount: historyMessages.length,
+      toolCallCount,
+      recentErrors,
+    });
+
     const systemContent = [
-      systemPrompt.current || '你是 MiMo，一个终端 AI 编程助手。',
+      dynamicSystemPrompt,
       projectContext,
+      smartContext,
       memoryContext,
     ].filter(Boolean).join('\n\n');
     const systemMessage: Message = {
@@ -806,6 +1915,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     // Update display messages (without system message)
     setMessages(prev => [...prev, userMessage]);
 
+    // Persist user message to session store
+    sessionManager.current.addMessage(userMessage);
+
     // Create client and agent loop
     const cfg = configRef.current;
     const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
@@ -815,12 +1927,13 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       workingDirectory: process.cwd(),
     };
 
-    const loop = new AgentLoop(client, toolRegistry.current, toolCtx, cfg.agent.maxIterations);
+    const loop = new AgentLoop(client, toolRegistry.current, toolCtx, cfg.agent.maxIterations, cfg.agent.reasoningEffort);
     agentLoop.current = loop;
 
     setIsStreaming(true);
     setStreamingContent('');
     setStreamingThinking('');
+    setStreamingToolCalls(new Map());
     setToolResults(new Map());
     setIteration(0);
 
@@ -861,7 +1974,20 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           });
           setIteration(prev => prev + 1);
         },
+        onToolCallDelta: (index: number, delta: { name?: string; arguments?: string }) => {
+          setStreamingToolCalls(prev => {
+            const next = new Map(prev);
+            const existing = next.get(index) || { name: '', args: '' };
+            next.set(index, {
+              name: delta.name || existing.name,
+              args: existing.args + (delta.arguments || ''),
+            });
+            return next;
+          });
+        },
         onToolResult: (name, result, error) => {
+          // Clear all streaming tool calls when any tool completes
+          setStreamingToolCalls(new Map());
           setToolResults(prev => {
             const next = new Map(prev);
             for (const [id, val] of next) {
@@ -908,10 +2034,24 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingThinking('');
+      setStreamingToolCalls(new Map());
 
       // 保存命令历史 + 完成通知 + 成本记录
       commandHistory.current.add(processedText);
       notifyComplete();
+
+      // 自动提交：对话完成后自动执行 git commit
+      if (autoCommit.current) {
+        setTimeout(() => handleSubmit('请用 shell 执行: git add -A && git commit -m "auto: ' + processedText.slice(0, 50).replace(/"/g, '\\"') + '"'), 500);
+      }
+
+      // Persist assistant/tool messages to session store (skip already-persisted user message)
+      const prevLen = messagesRef.current.length;
+      const newMessages = displayMessages.slice(prevLen);
+      for (const msg of newMessages) {
+        sessionManager.current.addMessage(msg);
+      }
+      sessionManager.current.updateUsage(result.usage);
       logCost({
         date: new Date().toISOString().slice(0, 10),
         model: configRef.current.provider.model,
@@ -926,6 +2066,27 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       if (sessionManager.current.current && sessionManager.current.current.name === 'New Session') {
         const name = processedText.slice(0, 30) + (processedText.length > 30 ? '...' : '');
         sessionManager.current.renameSession(name);
+      }
+
+      // 工作流链式执行：当前步骤完成后自动执行下一步
+      if (activeWorkflow.current) {
+        const { workflow, stepIndex } = activeWorkflow.current;
+        const nextIdx = stepIndex + 1;
+        if (nextIdx < workflow.steps.length) {
+          activeWorkflow.current.stepIndex = nextIdx;
+          const nextStep = workflow.steps[nextIdx];
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `⚡ 工作流进度: ${nextIdx + 1}/${workflow.steps.length} - ${nextStep.name}`,
+          }]);
+          setTimeout(() => handleSubmit(nextStep.prompt), 500);
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✅ 工作流 "${workflow.name}" 已完成！`,
+          }]);
+          activeWorkflow.current = null;
+        }
       }
     } catch (error) {
       if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
@@ -970,10 +2131,22 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     if (key.ctrl && input === 'l') { setMessages([]); return; }
     if (input === '?') { setOverlay('help'); }
 
-    // Alt+1/2/3 快速切换模式
-    if (key.meta && input === '1') { setMode('plan'); return; }
-    if (key.meta && input === '2') { setMode('agent'); return; }
-    if (key.meta && input === '3') { setMode('yolo'); return; }
+    // Alt+1/2/3 快速切换模式 (持久化到配置)
+    if (key.meta && input === '1') {
+      setMode('plan');
+      setConfig(prev => { const u = { ...prev, agent: { ...prev.agent, mode: 'plan' as AgentMode } }; saveConfig(u); return u; });
+      return;
+    }
+    if (key.meta && input === '2') {
+      setMode('agent');
+      setConfig(prev => { const u = { ...prev, agent: { ...prev.agent, mode: 'agent' as AgentMode } }; saveConfig(u); return u; });
+      return;
+    }
+    if (key.meta && input === '3') {
+      setMode('yolo');
+      setConfig(prev => { const u = { ...prev, agent: { ...prev.agent, mode: 'yolo' as AgentMode } }; saveConfig(u); return u; });
+      return;
+    }
 
     // Ctrl+Z 撤销
     if (key.ctrl && input === 'z') {
@@ -986,7 +2159,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const handleCommandSelect = useCallback((action: string) => {
     setOverlay('none');
     if (action.startsWith('mode:')) {
-      setMode(action.slice(5) as AgentMode);
+      const newMode = action.slice(5) as AgentMode;
+      setMode(newMode);
+      setConfig(prev => { const u = { ...prev, agent: { ...prev.agent, mode: newMode } }; saveConfig(u); return u; });
     } else {
       handleSlashCommand(`/${action}`);
     }
@@ -997,7 +2172,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     const session = sessionManager.current.resumeSession(sessionId);
     if (session) {
       setMessages(session.messages);
-      setUsage(session.token_usage);
+      setUsage(session.token_usage || { ...EMPTY_USAGE });
       setMode(session.mode);
     }
     setOverlay('none');
@@ -1019,10 +2194,22 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     }
   }, [approvalPending]);
 
-  // Create initial session
+  // Create initial session + config validation
   useEffect(() => {
     if (!needsSetup) {
       sessionManager.current.createSession('New Session', config.provider.model, mode);
+
+      // 配置验证
+      const warnings: string[] = [];
+      if (!config.provider.apiKey) warnings.push('⚠️ API 密钥未设置，运行 `--setup` 配置');
+      else if (config.provider.apiKey.length < 10) warnings.push('⚠️ API 密钥格式异常，可能无效');
+      if (!config.provider.baseUrl.includes('mimo') && !config.provider.baseUrl.includes('anthropic') && !config.provider.baseUrl.includes('localhost')) {
+        warnings.push(`⚠️ API 地址非 MiMo 官方: ${config.provider.baseUrl}`);
+      }
+      if (warnings.length > 0) {
+        setMessages([{ role: 'assistant', content: `🔧 **配置检查**\n${warnings.join('\n')}\n\n输入 \`/doctor\` 全面诊断` }]);
+      }
+
       // Auto-submit initial prompt if provided
       if (initialPrompt) {
         setTimeout(() => handleSubmit(initialPrompt), 100);
@@ -1034,6 +2221,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   useEffect(() => {
     return () => {
       sessionManager.current.close();
+      mcpClient.current.disconnectAll();
       if (streamTimerRef.current) clearInterval(streamTimerRef.current);
     };
   }, []);
@@ -1053,8 +2241,18 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       {overlay === 'command_palette' && (
         <CommandPalette theme={theme} currentMode={mode} onSelect={handleCommandSelect} onClose={() => setOverlay('none')} />
       )}
+      {/* Session picker */}
       {overlay === 'session_picker' && (
-        <SessionPicker sessions={sessions} theme={theme} onSelect={handleSessionSelect} onClose={() => setOverlay('none')} />
+        <SessionPicker
+          sessions={sessions}
+          theme={theme}
+          onSelect={handleSessionSelect}
+          onDelete={(sessionId) => {
+            sessionManager.current.deleteSession(sessionId);
+            setSessions(sessionManager.current.listSessions());
+          }}
+          onClose={() => setOverlay('none')}
+        />
       )}
       {overlay === 'help' && (
         <HelpOverlay theme={theme} onClose={() => setOverlay('none')} />
@@ -1079,6 +2277,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             theme={theme}
             streamingContent={streamingContent}
             streamingThinking={streamingThinking}
+            streamingToolCalls={streamingToolCalls}
             isStreaming={isStreaming}
             isThinking={isThinking}
             toolResults={toolResults}
@@ -1095,6 +2294,15 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             }}
             disabled={false}
             placeholder={isStreaming ? 'MiMo is thinking... (Ctrl+C to cancel)' : 'Type a message...'}
+            slashCommands={[
+              'new', 'fork', 'save', 'list', 'mode', 'model', 'clear', 'compact', 'help', 'retry', 'undo',
+              'export', 'git', 'tree', 'project', 'cost', 'theme', 'debug', 'health', 'doctor',
+              'history', 'search', 'rename', 'tokens', 'template', 'snippet', 'config',
+              'bookmark', 'stats', 'context', 'shortcuts', 'remember', 'forget', 'workflow',
+              'suggest', 'watch', 'chain', 'cd', 'think', 'fix', 'improve', 'batch', 'sub', 'tips',
+              'parallel', 'explore', 'review', 'status', 'auto', 'pipeline', 'kill', 'clean', 'metrics',
+            ]}
+            initialHistory={commandHistory.current.getAll()}
           />
         </>
       )}

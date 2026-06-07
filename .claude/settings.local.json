@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config *)",
+      "Bash(git commit -m 'feat: Mimo TUI - 基于小米 MiMo 的终端 AI 编程助手 *)",
+      "Bash(gh auth *)",
+      "Bash(winget install *)",
+      "Bash(scoop install *)",
+      "Bash(~\\\\scoop\\\\shims\\\\gh.exe *)",
+      "Bash(/c/Users/21417/scoop/shims/gh.exe *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git -c http.proxy=\"\" -c https.proxy=\"\" push -u origin main)"
+    ]
+  }
+}

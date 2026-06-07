@@ -52,7 +52,7 @@ export interface AnthropicMessage {
 }
 
 export type AnthropicContentBlock =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
   | { type: 'thinking'; thinking: string };
@@ -62,6 +62,7 @@ export interface AnthropicTool {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  cache_control?: { type: 'ephemeral' };
 }
 
 // Anthropic API request

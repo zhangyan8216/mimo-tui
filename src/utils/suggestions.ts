@@ -2,6 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 export interface Suggestion {
   icon: string;
@@ -20,7 +21,6 @@ export function generateSuggestions(cwd?: string): Suggestion[] {
   // Git 相关建议
   if (hasFile('.git')) {
     try {
-      const { execSync } = require('child_process');
       const status = execSync('git status --short', { cwd: root, encoding: 'utf-8', timeout: 3000 }).trim();
       if (status) {
         suggestions.push({

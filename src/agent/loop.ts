@@ -2,16 +2,16 @@
 // Handles Anthropic Messages API streaming format
 
 import type { Message, ToolCall, TokenUsage, AgentMode, AnthropicStreamEvent } from '../api/types.js';
-import { MiMoClient } from '../api/client.js';
+import { MiMoClient, repairJson } from '../api/client.js';
 import { ToolRegistry, type ToolContext } from '../tools/registry.js';
-import { isToolAllowedInMode, needsApproval } from './modes.js';
+import { isToolAllowedInMode, needsApproval, isReadOnlyTool } from './modes.js';
 import { accumulateUsage } from '../utils/tokens.js';
 import { log } from '../utils/logger.js';
 
 export interface AgentLoopCallbacks {
   onToken?: (token: string) => void;
   onReasoning?: (token: string) => void;
-  onToolStart?: (name: string, args: Record<string, unknown>) => void;
+  onToolStart?: (name: string, args: Record<string, unknown>, index?: number) => void;
   onToolResult?: (name: string, result: string, error?: string) => void;
   onToolCallDelta?: (index: number, delta: { name?: string; arguments?: string }) => void;
   onUsage?: (usage: TokenUsage) => void;
@@ -26,6 +26,7 @@ export class AgentLoop {
   private tools: ToolRegistry;
   private toolContext: ToolContext;
   private maxIterations: number;
+  private configuredReasoningEffort: string;
   private messages: Message[] = [];
   private totalUsage: TokenUsage = {
     promptTokens: 0, completionTokens: 0, totalTokens: 0,
@@ -37,11 +38,13 @@ export class AgentLoop {
     tools: ToolRegistry,
     toolContext: ToolContext,
     maxIterations = 32,
+    reasoningEffort = 'auto',
   ) {
     this.client = client;
     this.tools = tools;
     this.toolContext = toolContext;
     this.maxIterations = maxIterations;
+    this.configuredReasoningEffort = reasoningEffort;
   }
 
   async run(
@@ -51,14 +54,28 @@ export class AgentLoop {
   ): Promise<{ messages: Message[]; usage: TokenUsage }> {
     this.messages = [...messages];
     this.totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 };
+    this.filesReadThisTurn = new Set(); // 重置已读文件列表
 
     let iterations = 0;
+    let consecutiveEmptyResponses = 0;  // MiMo 空响应计数
+    let consecutiveToolErrors = 0;       // 连续工具错误计数
 
     while (iterations < this.maxIterations) {
       iterations++;
       log('debug', `Agent loop iteration ${iterations}`);
 
       const toolDefs = this.getToolsForMode(mode);
+
+      // MiMo 推理预算: 使用配置值或自动调整
+      let reasoningEffort: 'low' | 'medium' | 'high' = 'medium';
+      if (this.configuredReasoningEffort !== 'auto') {
+        reasoningEffort = this.configuredReasoningEffort as 'low' | 'medium' | 'high';
+      } else {
+        const msgCount = this.messages.length;
+        const recentToolCalls = this.messages.slice(-6).filter(m => m.tool_calls?.length).length;
+        if (msgCount <= 3 && recentToolCalls === 0) reasoningEffort = 'low';
+        else if (recentToolCalls >= 3 || iterations > 3) reasoningEffort = 'high';
+      }
 
       let content = '';
       let reasoning = '';
@@ -69,14 +86,13 @@ export class AgentLoop {
       // Issue #59: 无限重复循环检测
       const recentChunks: string[] = [];
       let repetitionCount = 0;
-      const REPETITION_THRESHOLD = 5; // 连续重复 5 次则停止
+      const REPETITION_THRESHOLD = 5;
 
       try {
         for await (const event of this.client.streamChat(this.messages, toolDefs, {
-          reasoningEffort: 'medium',
+          reasoningEffort,
           thinkingEnabled: true,
         })) {
-          // 检查是否被中止
           if (this.client.isAborted) break;
 
           this.handleStreamEvent(event, {
@@ -88,7 +104,6 @@ export class AgentLoop {
               content += text;
               callbacks.onToken?.(text);
 
-              // 重复检测
               recentChunks.push(text);
               if (recentChunks.length > 20) recentChunks.shift();
               if (detectRepetition(recentChunks, REPETITION_THRESHOLD)) {
@@ -108,7 +123,6 @@ export class AgentLoop {
               callbacks.onReasoning?.(text);
             },
             onToolUseStart: (blockIndex, toolId, toolName) => {
-              // Map this block index to a tool call
               const tcIdx = toolCalls.length;
               toolCalls.push({
                 id: toolId,
@@ -164,62 +178,209 @@ export class AgentLoop {
 
       this.messages.push(assistantMsg);
 
+      // === MiMo 自修复: 空响应处理 ===
+      if (validToolCalls.length === 0 && !content.trim()) {
+        consecutiveEmptyResponses++;
+        if (consecutiveEmptyResponses >= 2) {
+          log('warn', `MiMo 连续 ${consecutiveEmptyResponses} 次空响应，注入引导`);
+          this.messages.push({
+            role: 'user',
+            content: '[系统] 你没有回复任何内容也没有调用工具。请根据用户的需求使用工具完成任务。如果不确定怎么做，先用 codebase 或 read_file 了解情况。',
+          });
+          continue;
+        }
+      } else {
+        consecutiveEmptyResponses = 0;
+      }
+
       // If no tool calls, we're done
       if (validToolCalls.length === 0) {
         break;
       }
 
       // Execute tool calls
-      for (const tc of validToolCalls) {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(tc.function.arguments || '{}');
-        } catch {
-          args = {};
-        }
+      const toolGroups = this.groupToolCalls(validToolCalls);
+      let batchErrors = 0;
+      let batchSuccess = 0;
 
-        // Check if tool is allowed in this mode
-        if (!isToolAllowedInMode(mode, tc.function.name)) {
-          const toolMsg: Message = {
-            role: 'tool',
-            content: `Error: Tool "${tc.function.name}" is not available in ${mode} mode. Switch to Agent or YOLO mode to use write tools.`,
-            tool_call_id: tc.id,
-            name: tc.function.name,
-          };
-          this.messages.push(toolMsg);
-          callbacks.onToolResult?.(tc.function.name, '', `Not available in ${mode} mode`);
-          continue;
-        }
+      for (const group of toolGroups) {
+        if (group.parallel) {
+          // Execute read-only tools in parallel
+          const promises = group.calls.map(async (tc, groupIdx) => {
+            const globalIdx = group.startIndex + groupIdx;
+            let args: Record<string, unknown> = {};
+            try {
+              args = JSON.parse(repairJson(tc.function.arguments || '{}'));
+            } catch {
+              args = {};
+            }
 
-        // Request approval if needed
-        if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
-          const approved = await callbacks.requestApproval(tc.function.name, args);
-          if (!approved) {
+            if (!isToolAllowedInMode(mode, tc.function.name)) {
+              return { tc, args, result: null, error: `Not available in ${mode} mode` };
+            }
+
+            // 验证层: 拦截无效调用
+            const validation = this.validateToolCall(tc.function.name, args);
+            if (!validation.valid) {
+              return { tc, args, result: null, error: validation.error };
+            }
+            args = validation.args;
+
+            // edit_file 前置检查: 是否已读取该文件
+            if (tc.function.name === 'edit_file' && args.path && !this.filesReadThisTurn.has(String(args.path))) {
+              return { tc, args, result: null, error: `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取文件，然后从结果中复制 old_string。不要凭记忆写 old_string。` };
+            }
+
+            callbacks.onToolStart?.(tc.function.name, args, globalIdx);
+
+            const result = await this.executeWithRetry(tc.function.name, args);
+
+            // 记录已读文件
+            if (tc.function.name === 'read_file' && args.path && !result.error) {
+              this.filesReadThisTurn.add(String(args.path));
+            }
+
+            return { tc, args, result, error: result.error ?? undefined };
+          });
+
+          const results = await Promise.all(promises);
+          for (const { tc, args, result, error } of results) {
+            if (error && !result) {
+              const toolMsg: Message = {
+                role: 'tool',
+                content: `Error: Tool "${tc.function.name}" is not available in ${mode} mode. Switch to Agent or YOLO mode to use write tools.`,
+                tool_call_id: tc.id,
+                name: tc.function.name,
+              };
+              this.messages.push(toolMsg);
+              callbacks.onToolResult?.(tc.function.name, '', error);
+              batchErrors++;
+            } else if (result) {
+              result.tool_call_id = tc.id;
+              const content = result.error
+                ? this.enhanceToolError(tc.function.name, result.error, args)
+                : result.output;
+              const toolMsg: Message = {
+                role: 'tool',
+                content,
+                tool_call_id: tc.id,
+                name: tc.function.name,
+              };
+              this.messages.push(toolMsg);
+              callbacks.onToolResult?.(tc.function.name, result.output, result.error);
+              if (result.error) batchErrors++;
+              else batchSuccess++;
+            }
+          }
+        } else {
+          // Execute write tools sequentially
+          for (const tc of group.calls) {
+            let args: Record<string, unknown> = {};
+            try {
+              args = JSON.parse(repairJson(tc.function.arguments || '{}'));
+            } catch {
+              args = {};
+            }
+
+            if (!isToolAllowedInMode(mode, tc.function.name)) {
+              const toolMsg: Message = {
+                role: 'tool',
+                content: `Error: Tool "${tc.function.name}" is not available in ${mode} mode. Switch to Agent or YOLO mode to use write tools.`,
+                tool_call_id: tc.id,
+                name: tc.function.name,
+              };
+              this.messages.push(toolMsg);
+              callbacks.onToolResult?.(tc.function.name, '', `Not available in ${mode} mode`);
+              batchErrors++;
+              continue;
+            }
+
+            // 验证层
+            const validation = this.validateToolCall(tc.function.name, args);
+            if (!validation.valid) {
+              const toolMsg: Message = {
+                role: 'tool',
+                content: validation.error!,
+                tool_call_id: tc.id,
+                name: tc.function.name,
+              };
+              this.messages.push(toolMsg);
+              callbacks.onToolResult?.(tc.function.name, '', validation.error);
+              batchErrors++;
+              continue;
+            }
+            args = validation.args;
+
+            // edit_file 前置检查
+            if (tc.function.name === 'edit_file' && args.path && !this.filesReadThisTurn.has(String(args.path))) {
+              const errMsg = `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取，然后从结果中复制 old_string。`;
+              const toolMsg: Message = {
+                role: 'tool',
+                content: errMsg,
+                tool_call_id: tc.id,
+                name: tc.function.name,
+              };
+              this.messages.push(toolMsg);
+              callbacks.onToolResult?.(tc.function.name, '', errMsg);
+              batchErrors++;
+              continue;
+            }
+
+            if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
+              const approved = await callbacks.requestApproval(tc.function.name, args);
+              if (!approved) {
+                const toolMsg: Message = {
+                  role: 'tool',
+                  content: 'Operation denied by user.',
+                  tool_call_id: tc.id,
+                  name: tc.function.name,
+                };
+                this.messages.push(toolMsg);
+                callbacks.onToolResult?.(tc.function.name, '', 'Denied by user');
+                continue;
+              }
+            }
+
+            callbacks.onToolStart?.(tc.function.name, args);
+
+            const result = await this.executeWithRetry(tc.function.name, args);
+            result.tool_call_id = tc.id;
+
+            // 记录已读文件
+            if (tc.function.name === 'read_file' && args.path && !result.error) {
+              this.filesReadThisTurn.add(String(args.path));
+            }
+
             const toolMsg: Message = {
               role: 'tool',
-              content: 'Operation denied by user.',
+              content: result.error
+                ? this.enhanceToolError(tc.function.name, result.error, args)
+                : result.output,
               tool_call_id: tc.id,
               name: tc.function.name,
             };
             this.messages.push(toolMsg);
-            callbacks.onToolResult?.(tc.function.name, '', 'Denied by user');
-            continue;
+            callbacks.onToolResult?.(tc.function.name, result.output, result.error);
+            if (result.error) batchErrors++;
+            else batchSuccess++;
           }
         }
+      }
 
-        callbacks.onToolStart?.(tc.function.name, args);
-
-        const result = await this.tools.execute(tc.function.name, args, this.toolContext);
-        result.tool_call_id = tc.id;
-
-        const toolMsg: Message = {
-          role: 'tool',
-          content: result.error ? `Error: ${result.error}` : result.output,
-          tool_call_id: tc.id,
-          name: tc.function.name,
-        };
-        this.messages.push(toolMsg);
-        callbacks.onToolResult?.(tc.function.name, result.output, result.error);
+      // === MiMo 自修复: 连续工具错误处理 ===
+      if (batchErrors > 0 && batchSuccess === 0) {
+        consecutiveToolErrors++;
+        if (consecutiveToolErrors >= 2) {
+          log('warn', `MiMo 连续 ${consecutiveToolErrors} 轮工具调用全部失败`);
+          this.messages.push({
+            role: 'user',
+            content: '[系统] 你的工具调用连续失败。请仔细阅读上面每条错误信息中的"修复"提示，按提示操作。常见修复方式：1) 用 glob 搜索正确文件路径 2) 用 read_file 重新读取文件内容 3) 增加 old_string 的上下文使其唯一。',
+          });
+          consecutiveToolErrors = 0;
+          continue;
+        }
+      } else {
+        consecutiveToolErrors = 0;
       }
     }
 
@@ -314,6 +475,161 @@ export class AgentLoop {
       return allDefs.filter(d => isToolAllowedInMode(mode, d.function.name));
     }
     return allDefs;
+  }
+
+  /**
+   * Group tool calls into batches: consecutive read-only tools form a parallel group,
+   * write tools are each their own sequential group.
+   */
+  private groupToolCalls(toolCalls: ToolCall[]): Array<{
+    parallel: boolean;
+    calls: ToolCall[];
+    startIndex: number;
+  }> {
+    const groups: Array<{ parallel: boolean; calls: ToolCall[]; startIndex: number }> = [];
+    let i = 0;
+    while (i < toolCalls.length) {
+      const name = toolCalls[i].function.name;
+      if (isReadOnlyTool(name)) {
+        // Collect consecutive read-only tools
+        const start = i;
+        const calls: ToolCall[] = [];
+        while (i < toolCalls.length && isReadOnlyTool(toolCalls[i].function.name)) {
+          calls.push(toolCalls[i]);
+          i++;
+        }
+        groups.push({ parallel: true, calls, startIndex: start });
+      } else {
+        // Each write tool is its own sequential group
+        groups.push({ parallel: false, calls: [toolCalls[i]], startIndex: i });
+        i++;
+      }
+    }
+    return groups;
+  }
+
+  /**
+   * Execute a tool with retry logic for transient errors.
+   * Retries up to 2 times on transient failures.
+   */
+  private async executeWithRetry(
+    name: string,
+    args: Record<string, unknown>,
+    maxRetries = 2,
+  ): Promise<{ output: string; error?: string; tool_call_id?: string }> {
+    let lastError: { output: string; error?: string; tool_call_id?: string } | null = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const result = await this.tools.execute(name, args, this.toolContext);
+      if (!result.error) {
+        return result;
+      }
+      lastError = result;
+      if (attempt < maxRetries && this.isTransientError(result.error)) {
+        log('warn', `Tool "${name}" failed (attempt ${attempt + 1}/${maxRetries + 1}), retrying: ${result.error}`);
+        // Brief delay before retry
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      } else {
+        return result;
+      }
+    }
+    return lastError!;
+  }
+
+  /**
+   * Determine if an error is transient and worth retrying.
+   */
+  private isTransientError(error: string): boolean {
+    const transientPatterns = [
+      'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND',
+      'rate limit', 'timeout', 'EPIPE', 'socket hang up',
+      'network', 'temporarily unavailable', '503', '429',
+    ];
+    const lower = error.toLowerCase();
+    return transientPatterns.some(pattern => lower.includes(pattern));
+  }
+
+  /**
+   * MiMo 工具调用验证层: 在执行前拦截、验证、修复 MiMo 的工具调用
+   * 返回 { valid, args, error } — valid=false 时直接返回 error 给 MiMo
+   */
+  private validateToolCall(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): { valid: boolean; args: Record<string, unknown>; error?: string } {
+    // 1. 空参数修复
+    if (!args || Object.keys(args).length === 0) {
+      if (toolName === 'edit_file' || toolName === 'write_file' || toolName === 'read_file') {
+        return { valid: false, args, error: `错误: ${toolName} 需要参数。示例: {"path": "文件路径", ...}` };
+      }
+    }
+
+    // 2. edit_file 验证
+    if (toolName === 'edit_file') {
+      if (!args.path) return { valid: false, args, error: '错误: edit_file 缺少 path 参数' };
+      if (!args.old_string && args.old_string !== '') return { valid: false, args, error: '错误: edit_file 缺少 old_string 参数。必须先 read_file 读取文件，然后从结果中复制 old_string。' };
+      if (args.old_string === args.new_string) return { valid: false, args, error: '错误: old_string 和 new_string 相同，没有实际修改。' };
+      // 检查 old_string 是否看起来像是从文件中复制的（至少 10 个字符）
+      if (typeof args.old_string === 'string' && args.old_string.trim().length < 3) {
+        return { valid: false, args, error: '错误: old_string 太短（<3字符），可能不唯一。请从 read_file 结果中复制更多上下文。' };
+      }
+    }
+
+    // 3. write_file 验证
+    if (toolName === 'write_file') {
+      if (!args.path) return { valid: false, args, error: '错误: write_file 缺少 path 参数' };
+      if (!args.content && args.content !== '') return { valid: false, args, error: '错误: write_file 缺少 content 参数' };
+    }
+
+    // 4. read_file 验证
+    if (toolName === 'read_file') {
+      if (!args.path) return { valid: false, args, error: '错误: read_file 缺少 path 参数' };
+    }
+
+    // 5. shell 验证
+    if (toolName === 'shell') {
+      if (!args.command) return { valid: false, args, error: '错误: shell 缺少 command 参数' };
+      // 拦截危险命令
+      const cmd = String(args.command).toLowerCase();
+      if (cmd.includes('rm -rf /') || cmd.includes('rm -rf /*') || cmd.includes('format c:')) {
+        return { valid: false, args, error: '错误: 危险命令已被拦截。不要执行删除根目录或格式化磁盘的命令。' };
+      }
+    }
+
+    // 6. glob/grep 验证
+    if (toolName === 'glob' && !args.pattern) return { valid: false, args, error: '错误: glob 缺少 pattern 参数' };
+    if (toolName === 'grep' && !args.pattern) return { valid: false, args, error: '错误: grep 缺少 pattern 参数' };
+
+    return { valid: true, args };
+  }
+
+  /**
+   * 已读取文件跟踪: 确保 edit_file 之前 read_file 过该文件
+   */
+  private filesReadThisTurn = new Set<string>();
+
+  /**
+   * MiMo 自修复: 增强工具错误信息，帮助 MiMo 纠正
+   */
+  private enhanceToolError(toolName: string, error: string, args: Record<string, unknown>): string {
+    const enhanced: string[] = [`错误: ${error}`];
+
+    if (error.includes('File not found') || error.includes('ENOENT')) {
+      enhanced.push(`修复: 用 glob 工具搜索正确路径。示例: {"pattern": "**/*${String(args.path || '').split('/').pop() || ''}*"}`);
+    }
+
+    if (error.includes('String not found') || error.includes('not found in file')) {
+      enhanced.push(`修复: 先用 read_file 读取文件最新内容，然后从结果中精确复制 old_string。不要凭记忆写 old_string。`);
+    }
+
+    if (error.includes('Found') && error.includes('occurrences')) {
+      enhanced.push(`修复: old_string 匹配了多处。增加前后几行上下文使其唯一。`);
+    }
+
+    if (error.includes('Access denied')) {
+      enhanced.push(`修复: 文件在项目目录外。用相对路径或检查路径是否正确。`);
+    }
+
+    return enhanced.join('\n');
   }
 
   get currentUsage(): TokenUsage {
