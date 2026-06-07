@@ -9,6 +9,7 @@ import { isToolAllowedInMode, needsApproval, isReadOnlyTool } from './modes.js';
 import { accumulateUsage } from '../utils/tokens.js';
 import { log } from '../utils/logger.js';
 import { monitor } from '../utils/monitor.js';
+import { globalHooks } from '../hooks/index.js';
 
 export interface AgentLoopCallbacks {
   onToken?: (token: string) => void;
@@ -71,6 +72,9 @@ export class AgentLoop {
 
       const toolDefs = this.getToolsForMode(mode);
       this.toolCallIndex = 0; // Reset per iteration
+
+      // Hook: pre-send
+      await globalHooks.trigger('pre-send', { messages: this.messages });
 
       // MiMo 推理预算: 使用配置值或自动调整
       let reasoningEffort: 'low' | 'medium' | 'high' = 'medium';
@@ -152,6 +156,7 @@ export class AgentLoop {
         }
       } catch (error) {
         if (isThinking) callbacks.onThinkingEnd?.();
+        await globalHooks.trigger('on-error', { error: error instanceof Error ? error : new Error(String(error)) });
         callbacks.onError?.(error instanceof Error ? error : new Error(String(error)));
         break;
       }
@@ -220,63 +225,13 @@ export class AgentLoop {
             } catch {
               args = {};
             }
-
-            if (!isToolAllowedInMode(mode, tc.function.name)) {
-              return { tc, args, result: null, error: `Not available in ${mode} mode` };
-            }
-
-            // 验证层: 拦截无效调用
-            const validation = this.validateToolCall(tc.function.name, args);
-            if (!validation.valid) {
-              return { tc, args, result: null, error: validation.error };
-            }
-            args = validation.args;
-
-            // edit_file 前置检查: 是否已读取该文件
-            if (tc.function.name === 'edit_file' && args.path && !this.filesReadThisTurn.has(String(args.path))) {
-              return { tc, args, result: null, error: `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取文件，然后从结果中复制 old_string。不要凭记忆写 old_string。` };
-            }
-
-            callbacks.onToolStart?.(tc.function.name, args, globalIdx);
-
-            const result = await this.executeWithRetry(tc.function.name, args);
-
-            // 记录已读文件
-            if (tc.function.name === 'read_file' && args.path && !result.error) {
-              this.filesReadThisTurn.add(String(args.path));
-            }
-
-            return { tc, args, result, error: result.error ?? undefined };
+            return this.executeSingleTool(tc, args, mode, callbacks);
           });
 
           const results = await Promise.all(promises);
-          for (const { tc, args, result, error } of results) {
-            if (error && !result) {
-              const toolMsg: Message = {
-                role: 'tool',
-                content: `Error: Tool "${tc.function.name}" is not available in ${mode} mode. Switch to Agent or YOLO mode to use write tools.`,
-                tool_call_id: tc.id,
-                name: tc.function.name,
-              };
-              this.messages.push(toolMsg);
-              callbacks.onToolResult?.(tc.function.name, '', error);
-              batchErrors++;
-            } else if (result) {
-              result.tool_call_id = tc.id;
-              const content = result.error
-                ? this.enhanceToolError(tc.function.name, result.error, args)
-                : result.output;
-              const toolMsg: Message = {
-                role: 'tool',
-                content,
-                tool_call_id: tc.id,
-                name: tc.function.name,
-              };
-              this.messages.push(toolMsg);
-              callbacks.onToolResult?.(tc.function.name, result.output, result.error);
-              if (result.error) batchErrors++;
-              else batchSuccess++;
-            }
+          for (const { error, success } of results) {
+            if (!success) batchErrors++;
+            else batchSuccess++;
           }
         } else {
           // Execute write tools sequentially
@@ -287,87 +242,8 @@ export class AgentLoop {
             } catch {
               args = {};
             }
-
-            if (!isToolAllowedInMode(mode, tc.function.name)) {
-              const toolMsg: Message = {
-                role: 'tool',
-                content: `Error: Tool "${tc.function.name}" is not available in ${mode} mode. Switch to Agent or YOLO mode to use write tools.`,
-                tool_call_id: tc.id,
-                name: tc.function.name,
-              };
-              this.messages.push(toolMsg);
-              callbacks.onToolResult?.(tc.function.name, '', `Not available in ${mode} mode`);
-              batchErrors++;
-              continue;
-            }
-
-            // 验证层
-            const validation = this.validateToolCall(tc.function.name, args);
-            if (!validation.valid) {
-              const toolMsg: Message = {
-                role: 'tool',
-                content: validation.error!,
-                tool_call_id: tc.id,
-                name: tc.function.name,
-              };
-              this.messages.push(toolMsg);
-              callbacks.onToolResult?.(tc.function.name, '', validation.error);
-              batchErrors++;
-              continue;
-            }
-            args = validation.args;
-
-            // edit_file 前置检查
-            if (tc.function.name === 'edit_file' && args.path && !this.filesReadThisTurn.has(String(args.path))) {
-              const errMsg = `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取，然后从结果中复制 old_string。`;
-              const toolMsg: Message = {
-                role: 'tool',
-                content: errMsg,
-                tool_call_id: tc.id,
-                name: tc.function.name,
-              };
-              this.messages.push(toolMsg);
-              callbacks.onToolResult?.(tc.function.name, '', errMsg);
-              batchErrors++;
-              continue;
-            }
-
-            if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
-              const approved = await callbacks.requestApproval(tc.function.name, args);
-              if (!approved) {
-                const toolMsg: Message = {
-                  role: 'tool',
-                  content: 'Operation denied by user.',
-                  tool_call_id: tc.id,
-                  name: tc.function.name,
-                };
-                this.messages.push(toolMsg);
-                callbacks.onToolResult?.(tc.function.name, '', 'Denied by user');
-                continue;
-              }
-            }
-
-            callbacks.onToolStart?.(tc.function.name, args);
-
-            const result = await this.executeWithRetry(tc.function.name, args);
-            result.tool_call_id = tc.id;
-
-            // 记录已读文件
-            if (tc.function.name === 'read_file' && args.path && !result.error) {
-              this.filesReadThisTurn.add(String(args.path));
-            }
-
-            const toolMsg: Message = {
-              role: 'tool',
-              content: result.error
-                ? this.enhanceToolError(tc.function.name, result.error, args)
-                : result.output,
-              tool_call_id: tc.id,
-              name: tc.function.name,
-            };
-            this.messages.push(toolMsg);
-            callbacks.onToolResult?.(tc.function.name, result.output, result.error);
-            if (result.error) batchErrors++;
+            const { error, success } = await this.executeSingleTool(tc, args, mode, callbacks);
+            if (!success) batchErrors++;
             else batchSuccess++;
           }
         }
@@ -392,6 +268,7 @@ export class AgentLoop {
       monitor.endTimer('iteration');
     }
 
+    await globalHooks.trigger('post-response', { messages: this.messages });
     return { messages: this.messages, usage: this.totalUsage };
   }
 
@@ -440,6 +317,71 @@ export class AgentLoop {
       return allDefs.filter(d => isToolAllowedInMode(mode, d.function.name));
     }
     return allDefs;
+  }
+
+  /**
+   * Execute a single tool call with full validation, approval, hooks, and error enhancement.
+   * Used by both parallel and sequential execution paths to avoid duplication.
+   */
+  private async executeSingleTool(
+    tc: ToolCall,
+    args: Record<string, unknown>,
+    mode: AgentMode,
+    callbacks: AgentLoopCallbacks,
+  ): Promise<{ tc: ToolCall; error?: string; success: boolean }> {
+    // Validation
+    if (!isToolAllowedInMode(mode, tc.function.name)) {
+      return { tc, error: `Not available in ${mode} mode`, success: false };
+    }
+
+    const validation = this.validateToolCall(tc.function.name, args);
+    if (!validation.valid) {
+      return { tc, error: validation.error, success: false };
+    }
+    args = validation.args;
+
+    // edit_file pre-check
+    if (tc.function.name === 'edit_file' && args.path && !this.filesReadThisTurn.has(String(args.path))) {
+      return { tc, error: `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取。`, success: false };
+    }
+
+    // Approval check for write tools
+    if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
+      const approved = await callbacks.requestApproval(tc.function.name, args);
+      if (!approved) {
+        return { tc, error: 'Denied by user', success: false };
+      }
+    }
+
+    callbacks.onToolStart?.(tc.function.name, args);
+
+    // Execute with hooks
+    await globalHooks.trigger('pre-tool-execute', { toolName: tc.function.name, args });
+    const result = await this.executeWithRetry(tc.function.name, args);
+    await globalHooks.trigger('post-tool-execute', {
+      toolName: tc.function.name,
+      args,
+      result: result.output,
+      error: result.error ? new Error(result.error) : undefined,
+    });
+
+    // Track read files
+    if (tc.function.name === 'read_file' && args.path && !result.error) {
+      this.filesReadThisTurn.add(String(args.path));
+    }
+
+    result.tool_call_id = tc.id;
+    const content = result.error ? this.enhanceToolError(tc.function.name, result.error, args) : result.output;
+    const toolMsg: Message = {
+      role: 'tool',
+      content,
+      tool_call_id: tc.id,
+      name: tc.function.name,
+    };
+    this.messages.push(toolMsg);
+    callbacks.onToolResult?.(tc.function.name, result.output, result.error);
+
+    return { tc, error: result.error, success: !result.error };
   }
 
   /**

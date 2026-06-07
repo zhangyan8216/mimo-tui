@@ -53,6 +53,7 @@ import { MCPClient } from '../mcp/client.js';
 import { SubAgentManager } from '../agent/sub-agent.js';
 import { PluginManager } from '../plugins/manager.js';
 import { KnowledgeBase } from '../utils/knowledge-base.js';
+import { globalHooks } from '../hooks/index.js';
 import { ChatView } from './ChatView.js';
 import { InputArea } from './InputArea.js';
 import { StatusBar } from './StatusBar.js';
@@ -2305,6 +2306,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   useEffect(() => {
     if (!needsSetup) {
       sessionManager.current.createSession('New Session', config.provider.model, mode);
+      globalHooks.trigger('on-session-start', {});
 
       // 配置验证
       const warnings: string[] = [];
@@ -2327,6 +2329,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   // Cleanup session manager on unmount
   useEffect(() => {
     return () => {
+      globalHooks.trigger('on-session-end', {});
       sessionManager.current.close();
       mcpClient.current.disconnectAll();
       if (streamTimerRef.current) clearInterval(streamTimerRef.current);

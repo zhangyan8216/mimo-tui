@@ -6,12 +6,13 @@ Terminal AI coding agent powered by Xiaomi MiMo. A full-screen TUI (Terminal Use
 
 - **Full-screen TUI** -- built with Ink (React for CLI), card-based message rendering
 - **Streaming responses** -- real-time output at 30fps, displays reasoning/thinking process
-- **15 built-in tools** -- read/write/edit files, shell commands, glob, grep, web fetch, todo, test runner, codebase analysis, docker, coverage, multi-edit
+- **16 built-in tools** -- read/write/edit files, shell commands, glob, grep, web fetch, todo, test runner, codebase analysis (6 actions), docker (8 actions), coverage, multi-edit, database (4 actions), code review (4 actions), benchmark (4 actions)
 - **3 provider backends** -- Anthropic/MiMo (default), OpenAI/GPT, Google Gemini with auto-detection
 - **3 agent modes** -- Plan (read-only), Agent (interactive approval), YOLO (auto-approve)
 - **AI memory** -- persist user preferences across sessions, auto-injected into system prompt
 - **5 workflows** -- code review, test generation, refactoring, git commit, debugging
-- **12 conversation templates** -- preset prompts for common tasks
+- **50+ slash commands** -- session, git, model, cost, AI, and plugin commands
+- **35+ git sub-commands** -- full git workflow integration
 - **Context compression** -- automatic summarisation of old messages when context grows too long
 - **Plugin system** -- extend with custom tools and commands via local or npm plugins
 - **5 themes** -- default, Whale, Matrix, Dracula, Solarized
@@ -134,6 +135,17 @@ See the full [Configuration Reference](docs/configuration.md).
 /tpl            Templates (12)       /wf             Workflows (5)
 /mem <k> <v>    Remember info        /forget <k>     Forget info
 /suggest        Smart suggestions    /chain          Command chain
+/kb             Knowledge base       /parallel       Parallel execution
+/pipeline       Pipeline mode        /explore        Code exploration
+/review         Code review          /auto           Auto-pilot mode
+/sub            Sub-agent            /batch          Batch operations
+/monitor        Performance monitor  /metrics        Metrics report
+/tips           Usage tips           /kill           Kill process
+/clean          Clean workspace      /improve        Improve code
+/doctor         Health diagnostics   /fix            Auto-fix issues
+/think          Deep reasoning       /context        Context info
+/debug agents   Agent debug          /config edit    Edit config
+/config reset   Reset config
 ```
 
 See the full [Commands Reference](docs/commands.md).
