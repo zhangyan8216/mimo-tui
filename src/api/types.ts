@@ -116,7 +116,7 @@ export interface AnthropicStreamEvent {
 }
 
 // Multi-provider types
-export type ProviderType = 'anthropic' | 'openai' | 'auto';
+export type ProviderType = 'anthropic' | 'openai' | 'gemini' | 'auto';
 
 
 export interface AnthropicUsage {

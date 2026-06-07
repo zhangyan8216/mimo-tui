@@ -22,6 +22,8 @@ import { todoTool } from '../tools/todo.js';
 import { codebaseTool } from '../tools/codebase.js';
 import { testRunnerTool } from '../tools/test-runner.js';
 import { multiEditTool } from '../tools/multi-edit.js';
+import { dockerTool } from '../tools/docker.js';
+import { coverageTool } from '../tools/coverage.js';
 import { AgentLoop } from '../agent/loop.js';
 import { compactContext, needsCompaction } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -45,6 +47,7 @@ import { buildProjectContext, extractRelevantContext, type ProjectContext } from
 import { buildSystemPrompt, extractRecentErrors } from '../utils/prompt-builder.js';
 import { MCPClient } from '../mcp/client.js';
 import { SubAgentManager } from '../agent/sub-agent.js';
+import { PluginManager } from '../plugins/manager.js';
 import { ChatView } from './ChatView.js';
 import { InputArea } from './InputArea.js';
 import { StatusBar } from './StatusBar.js';
@@ -153,6 +156,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const fileWatcher = useRef(new FileWatcher());
   const mcpClient = useRef<MCPClient>(new MCPClient());
   const subAgentManager = useRef(new SubAgentManager(3));
+  const pluginManager = useRef<PluginManager | null>(null);
   const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);
   const autoCommit = useRef(false);
   const isAutoCommitting = useRef(false);
@@ -178,6 +182,8 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     registry.register(codebaseTool);
     registry.register(testRunnerTool);
     registry.register(multiEditTool);
+    registry.register(dockerTool);
+    registry.register(coverageTool);
     return registry;
   })());
 
@@ -254,6 +260,14 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       }
     })();
   }, [config.mcp.servers]);
+
+  // Load and activate plugins
+  useEffect(() => {
+    const pm = new PluginManager(toolRegistry.current);
+    pm.discoverAndActivate(process.cwd(), configRef.current).catch(() => {});
+    pluginManager.current = pm;
+    return () => { pm.deactivateAll().catch(() => {}); };
+  }, []);
 
   // Handle setup completion
   const handleSetupComplete = useCallback((newConfig: Config) => {
@@ -1801,11 +1815,24 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         break;
       }
 
-      default:
+      // Check plugin commands
+      default: {
+        if (pluginManager.current?.hasCommand(cmd)) {
+          pluginManager.current.executeCommand(cmd, cmdArgs).then(result => {
+            setMessages(prev => [...prev, { role: 'assistant', content: result }]);
+          }).catch(err => {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `❌ 插件命令 "${cmd}" 执行失败: ${err instanceof Error ? err.message : String(err)}`,
+            }]);
+          });
+          break;
+        }
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `❓ 未知命令: \`/${cmd}\`\n输入 \`/help\` 查看所有可用命令`,
         }]);
+      }
     }
   }, []);
 

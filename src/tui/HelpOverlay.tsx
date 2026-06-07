@@ -117,6 +117,9 @@ export const HelpOverlay: React.FC<HelpOverlayProps> = ({ theme, onClose }) => {
         <Text>  <K>/git authors</K>           <Text color={theme.fg.sub}>所有作者及提交次数</Text></Text>
         <Text>  <K>/git churn</K>             <Text color={theme.fg.sub}>文件变更频率排名</Text></Text>
         <Text>  <K>/git timeline &lt;file&gt;</K>   <Text color={theme.fg.sub}>文件提交时间线</Text></Text>
+
+        <Text color={theme.tone.accent} bold>插件</Text>
+        <Text color={theme.fg.sub}>📁 插件放在 .mimo/plugins/ 目录</Text>
       </Box>
       <Box marginTop={1}>
         <Text dimColor color={theme.fg.meta}>按 Esc 或 Enter 关闭...</Text>
