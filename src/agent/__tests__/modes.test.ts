@@ -73,8 +73,9 @@ describe('needsApproval', () => {
       expect(needsApproval('plan', 'edit_file')).toBe(true);
     });
 
-    it('requires approval for unknown tools', () => {
-      expect(needsApproval('plan', 'unknown_tool')).toBe(true);
+    it('does not require approval for unknown tools (blocked at mode level)', () => {
+      // plan 模式下未知工具被 isToolAllowedInMode 拦截，不需要审批检查
+      expect(needsApproval('plan', 'unknown_tool')).toBe(false);
     });
   });
 
@@ -89,9 +90,11 @@ describe('needsApproval', () => {
       expect(needsApproval('agent', 'shell')).toBe(true);
     });
 
-    it('requires approval for write tools', () => {
-      expect(needsApproval('agent', 'write_file')).toBe(true);
-      expect(needsApproval('agent', 'edit_file')).toBe(true);
+    it('auto-approves write tools', () => {
+      // agent 模式: 写操作自动批准
+      expect(needsApproval('agent', 'write_file')).toBe(false);
+      expect(needsApproval('agent', 'edit_file')).toBe(false);
+      expect(needsApproval('agent', 'multi_edit')).toBe(false);
     });
   });
 
@@ -106,8 +109,8 @@ describe('needsApproval', () => {
       expect(needsApproval('yolo', 'web_fetch')).toBe(false);
     });
 
-    it('requires approval for unknown tools', () => {
-      expect(needsApproval('yolo', 'custom_tool')).toBe(true);
+    it('does not require approval for unknown tools', () => {
+      expect(needsApproval('yolo', 'custom_tool')).toBe(false);
     });
   });
 });
@@ -155,7 +158,7 @@ describe('getModeConfig', () => {
     const config = getModeConfig('agent');
     expect(config.name).toBe('agent');
     expect(config.autoApproveReads).toBe(true);
-    expect(config.autoApproveWrites).toBe(false);
+    expect(config.autoApproveWrites).toBe(true);
     expect(config.autoApproveShell).toBe(false);
   });
 
