@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { Tool, ToolContext } from './registry.js';
+import { analyzeDependencies, formatDepAnalysis } from '../analysis/deps-analyzer.js';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'build', 'out', '.next', '__pycache__', '.cache']);
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
@@ -362,14 +363,15 @@ export const codebaseTool: Tool = {
 - index: 扫描项目，返回文件数、行数、入口文件、导出符号
 - symbols: 查找符号定义。示例: {"action":"symbols","target":"App"}
 - deps: 文件依赖关系。示例: {"action":"deps","target":"src/App.tsx"}
-- related: 相关文件。示例: {"action":"related","target":"src/App.tsx"}`,
+- related: 相关文件。示例: {"action":"related","target":"src/App.tsx"}
+- deps-analysis: 项目依赖分析，检测未使用和未声明的依赖。示例: {"action":"deps-analysis"}`,
   parameters: {
     type: 'object',
     properties: {
       action: {
         type: 'string',
-        enum: ['index', 'symbols', 'deps', 'related'],
-        description: '子命令: index(扫描), symbols(符号查找), deps(依赖图), related(关联文件)',
+        enum: ['index', 'symbols', 'deps', 'related', 'deps-analysis'],
+        description: '子命令: index(扫描), symbols(符号查找), deps(依赖图), related(关联文件), deps-analysis(依赖分析)',
       },
       target: {
         type: 'string',
@@ -423,8 +425,12 @@ export const codebaseTool: Tool = {
         }
         return formatRelated(target, allFiles);
 
+      case 'deps-analysis':
+        const depAnalysis = analyzeDependencies(rootDir);
+        return formatDepAnalysis(depAnalysis);
+
       default:
-        return `Error: Unknown action "${action}". Valid actions: index, symbols, deps, related`;
+        return `Error: Unknown action "${action}". Valid actions: index, symbols, deps, related, deps-analysis`;
     }
   },
 };

@@ -5,6 +5,7 @@ import path from 'path';
 import os from 'os';
 import { parse as parseToml } from 'smol-toml';
 import type { AgentMode, MCPServerConfig } from './api/types.js';
+import type { ProviderType } from './api/providers/index.js';
 
 const CONFIG_DIR = path.join(os.homedir(), '.mimo');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.toml');
@@ -14,6 +15,7 @@ export interface Config {
     apiKey: string;
     baseUrl: string;
     model: string;
+    providerType: ProviderType;
   };
   agent: {
     mode: AgentMode;
@@ -38,6 +40,7 @@ export const DEFAULT_CONFIG: Config = {
     apiKey: '',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
     model: 'mimo-v2.5-pro',
+    providerType: 'auto',
   },
   agent: {
     mode: 'agent',
@@ -71,6 +74,7 @@ export function loadConfig(): Config {
         if (p.api_key) config.provider.apiKey = String(p.api_key);
         if (p.base_url) config.provider.baseUrl = String(p.base_url);
         if (p.model) config.provider.model = String(p.model);
+        if (p.provider_type) config.provider.providerType = p.provider_type as ProviderType;
       }
       if (toml.agent) {
         const a = toml.agent as Record<string, unknown>;
@@ -106,6 +110,7 @@ export function loadConfig(): Config {
   if (process.env.MIMO_API_KEY) config.provider.apiKey = process.env.MIMO_API_KEY;
   if (process.env.MIMO_BASE_URL) config.provider.baseUrl = process.env.MIMO_BASE_URL;
   if (process.env.MIMO_MODEL) config.provider.model = process.env.MIMO_MODEL;
+  if (process.env.MIMO_PROVIDER_TYPE) config.provider.providerType = process.env.MIMO_PROVIDER_TYPE as ProviderType;
 
   return config;
 }
@@ -121,6 +126,7 @@ export function saveConfig(config: Config): void {
 api_key = "${escapeTomlString(config.provider.apiKey)}"
 base_url = "${escapeTomlString(config.provider.baseUrl)}"
 model = "${escapeTomlString(config.provider.model)}"
+provider_type = "${config.provider.providerType}"
 
 [agent]
 mode = "${config.agent.mode}"

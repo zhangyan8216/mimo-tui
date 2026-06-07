@@ -3,7 +3,7 @@
 // 优化: 保留工具调用的文件路径和错误信息，更精确的 token 估算
 
 import type { Message, TokenUsage } from '../api/types.js';
-import { MiMoClient } from '../api/client.js';
+import type { ProviderAdapter } from '../api/provider.js';
 import { log } from '../utils/logger.js';
 
 // 上下文阈值 (字符数) - 约 60-80K tokens for mixed CN/EN content
@@ -76,7 +76,7 @@ function formatMessageForSummary(msg: Message, idx: number): string {
  */
 export async function compactContext(
   messages: Message[],
-  client: MiMoClient,
+  client: ProviderAdapter,
   onProgress?: (msg: string) => void,
   model?: string,
 ): Promise<{ compacted: Message[]; savedTokens: number }> {

@@ -9,7 +9,7 @@ import { saveConfig, DEFAULT_CONFIG } from '../config.js';
 import type { Message, TokenUsage, AgentMode, Skill } from '../api/types.js';
 import type { Theme } from './theme.js';
 import { getTheme } from './theme.js';
-import { MiMoClient } from '../api/client.js';
+import { createProvider } from '../api/providers/index.js';
 import { ToolRegistry, type ToolContext } from '../tools/registry.js';
 import { readFileTool } from '../tools/read-file.js';
 import { writeFileTool } from '../tools/write-file.js';
@@ -348,7 +348,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         break;
 
       case 'compact': {
-        const client = new MiMoClient(configRef.current.provider.baseUrl, configRef.current.provider.apiKey, configRef.current.provider.model);
+        const client = createProvider(configRef.current.provider.providerType, configRef.current.provider.apiKey, configRef.current.provider.baseUrl, configRef.current.provider.model);
         setMessages(prev => [...prev, { role: 'assistant', content: '⏳ 正在压缩上下文...' }]);
         compactContext(messagesRef.current, client, (msg) => {
           setMessages(prev => {
@@ -1569,7 +1569,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           break;
         }
         const cfg = configRef.current;
-        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
         const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
         setMessages(prev => [...prev, { role: 'assistant', content: `🔀 后台任务 **${taskName}** 已启动` }]);
         subAgentManager.current.spawn(taskName, taskPrompt, client, toolRegistry.current, toolCtx, modeRef.current, (task) => {
@@ -1648,7 +1648,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           break;
         }
         const cfg = configRef.current;
-        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
         const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
         setMessages(prev => [...prev, { role: 'assistant', content: `🔀 并行执行 ${tasks.length} 个任务...` }]);
 
@@ -1674,7 +1674,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           break;
         }
         const cfg = configRef.current;
-        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
         const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
 
         setMessages(prev => [...prev, { role: 'assistant', content: `🔗 管道执行 ${stages.length} 个阶段:\n${stages.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}` }]);
@@ -1723,7 +1723,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           break;
         }
         const cfg = configRef.current;
-        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
         const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
         setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在探索: ${topic}` }]);
         subAgentManager.current.spawn(`explore-${topic.slice(0, 20)}`, `请用 codebase 和 read_file 工具探索项目，回答以下问题: ${topic}. 只读取和分析，不要修改任何文件。`, client, toolRegistry.current, toolCtx, 'plan', (result) => {
@@ -1736,7 +1736,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       case 'review': {
         const target = cmdArgs.join(' ') || '最近的代码变更';
         const cfg = configRef.current;
-        const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+        const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
         const toolCtx = { sandbox: sandbox.current, cwd: process.cwd(), workingDirectory: process.cwd() };
         setMessages(prev => [...prev, { role: 'assistant', content: `🔍 正在审查: ${target}` }]);
         subAgentManager.current.spawn(`review-${target.slice(0, 20)}`, `请审查 ${target} 的代码质量。检查: 1) 潜在的 bug 2) 性能问题 3) 安全隐患 4) 代码风格 5) 可改进建议。给出具体的问题描述和修复建议。`, client, toolRegistry.current, toolCtx, modeRef.current, (result) => {
@@ -1850,7 +1850,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     let historyMessages = messagesRef.current.filter(m => m.role !== 'system');
     if (needsCompaction(historyMessages)) {
       const cfg = configRef.current;
-      const compactClient = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+      const compactClient = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
       try {
         const { compacted } = await compactContext(historyMessages, compactClient);
         historyMessages = compacted;
@@ -1922,7 +1922,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
 
     // Create client and agent loop
     const cfg = configRef.current;
-    const client = new MiMoClient(cfg.provider.baseUrl, cfg.provider.apiKey, cfg.provider.model);
+    const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
     const toolCtx: ToolContext = {
       sandbox: sandbox.current,
       cwd: process.cwd(),

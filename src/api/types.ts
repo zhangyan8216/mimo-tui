@@ -115,6 +115,10 @@ export interface AnthropicStreamEvent {
   error?: { type: string; message: string };
 }
 
+// Multi-provider types
+export type ProviderType = 'anthropic' | 'openai' | 'auto';
+
+
 export interface AnthropicUsage {
   input_tokens: number;
   output_tokens: number;

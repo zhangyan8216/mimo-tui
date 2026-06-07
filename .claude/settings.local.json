@@ -10,7 +10,8 @@
       "Bash(/c/Users/21417/scoop/shims/gh.exe *)",
       "Bash(git remote *)",
       "Bash(git branch *)",
-      "Bash(git -c http.proxy=\"\" -c https.proxy=\"\" push -u origin main)"
+      "Bash(git -c http.proxy=\"\" -c https.proxy=\"\" push -u origin main)",
+      "Bash(New-Item *)"
     ]
   }
 }

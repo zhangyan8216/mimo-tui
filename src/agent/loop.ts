@@ -1,8 +1,9 @@
 // src/agent/loop.ts - Main agent loop (stream → tool → stream)
 // Handles Anthropic Messages API streaming format
 
-import type { Message, ToolCall, TokenUsage, AgentMode, AnthropicStreamEvent } from '../api/types.js';
-import { MiMoClient, repairJson } from '../api/client.js';
+import type { Message, ToolCall, TokenUsage, AgentMode } from '../api/types.js';
+import type { ProviderAdapter, StreamEvent } from '../api/provider.js';
+import { repairJson } from '../api/providers/anthropic.js';
 import { ToolRegistry, type ToolContext } from '../tools/registry.js';
 import { isToolAllowedInMode, needsApproval, isReadOnlyTool } from './modes.js';
 import { accumulateUsage } from '../utils/tokens.js';
@@ -22,19 +23,20 @@ export interface AgentLoopCallbacks {
 }
 
 export class AgentLoop {
-  private client: MiMoClient;
+  private client: ProviderAdapter;
   private tools: ToolRegistry;
   private toolContext: ToolContext;
   private maxIterations: number;
   private configuredReasoningEffort: string;
   private messages: Message[] = [];
+  private toolCallIndex = 0;
   private totalUsage: TokenUsage = {
     promptTokens: 0, completionTokens: 0, totalTokens: 0,
     cacheHitTokens: 0, cacheMissTokens: 0,
   };
 
   constructor(
-    client: MiMoClient,
+    client: ProviderAdapter,
     tools: ToolRegistry,
     toolContext: ToolContext,
     maxIterations = 32,
@@ -55,6 +57,7 @@ export class AgentLoop {
     this.messages = [...messages];
     this.totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 };
     this.filesReadThisTurn = new Set(); // 重置已读文件列表
+    this.toolCallIndex = 0; // 重置工具调用索引
 
     let iterations = 0;
     let consecutiveEmptyResponses = 0;  // MiMo 空响应计数
@@ -65,6 +68,7 @@ export class AgentLoop {
       log('debug', `Agent loop iteration ${iterations}`);
 
       const toolDefs = this.getToolsForMode(mode);
+      this.toolCallIndex = 0; // Reset per iteration
 
       // MiMo 推理预算: 使用配置值或自动调整
       let reasoningEffort: 'low' | 'medium' | 'high' = 'medium';
@@ -388,10 +392,10 @@ export class AgentLoop {
   }
 
   /**
-   * Handle a single Anthropic streaming event.
+   * Handle a single unified streaming event.
    */
   private handleStreamEvent(
-    event: AnthropicStreamEvent,
+    event: StreamEvent,
     handlers: {
       onText: (text: string) => void;
       onThinking: (text: string) => void;
@@ -401,71 +405,28 @@ export class AgentLoop {
     },
   ): void {
     switch (event.type) {
-      case 'message_start': {
-        // Initial usage from message_start
-        if (event.message?.usage) {
-          const u = event.message.usage;
-          handlers.onUsage({
-            promptTokens: u.input_tokens,
-            completionTokens: u.output_tokens,
-            totalTokens: u.input_tokens + u.output_tokens,
-            cacheHitTokens: u.cache_read_input_tokens || 0,
-            cacheMissTokens: u.input_tokens - (u.cache_read_input_tokens || 0),
-          });
+      case 'text':
+        if (event.text) handlers.onText(event.text);
+        break;
+      case 'thinking':
+        if (event.thinking) handlers.onThinking(event.thinking);
+        break;
+      case 'tool_use_start':
+        if (event.toolId && event.toolName) {
+          handlers.onToolUseStart(this.toolCallIndex++, event.toolId, event.toolName);
         }
         break;
-      }
-
-      case 'content_block_start': {
-        const block = event.content_block;
-        if (!block || event.index === undefined) break;
-
-        if (block.type === 'thinking') {
-          // Thinking block started - will receive deltas
-        } else if (block.type === 'tool_use') {
-          handlers.onToolUseStart(event.index, block.id || '', block.name || '');
-        } else if (block.type === 'text' && block.text) {
-          // Initial text (rare, usually comes via deltas)
-          handlers.onText(block.text);
+      case 'tool_use_delta':
+        if (event.toolArgsDelta) {
+          handlers.onToolUseDelta(this.toolCallIndex - 1, event.toolArgsDelta);
         }
         break;
-      }
-
-      case 'content_block_delta': {
-        const delta = event.delta;
-        if (!delta || event.index === undefined) break;
-
-        if (delta.type === 'thinking_delta' && delta.thinking) {
-          handlers.onThinking(delta.thinking);
-        } else if (delta.type === 'text_delta' && delta.text) {
-          handlers.onText(delta.text);
-        } else if (delta.type === 'input_json_delta' && delta.partial_json) {
-          handlers.onToolUseDelta(event.index, delta.partial_json);
-        }
+      case 'usage':
+        if (event.usage) handlers.onUsage(event.usage);
         break;
-      }
-
-      case 'message_delta': {
-        // Final usage update
-        if (event.usage) {
-          const u = event.usage;
-          handlers.onUsage({
-            promptTokens: 0, // Already reported in message_start
-            completionTokens: u.output_tokens,
-            totalTokens: u.output_tokens,
-            cacheHitTokens: 0,
-            cacheMissTokens: 0,
-          });
-        }
+      case 'error':
+        if (event.error) log('error', 'Stream error', event.error);
         break;
-      }
-
-      case 'error': {
-        log('error', 'Stream error', event.error);
-        break;
-      }
-
-      // content_block_stop, message_stop - no action needed
     }
   }
 

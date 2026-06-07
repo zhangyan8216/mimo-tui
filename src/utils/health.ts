@@ -1,7 +1,7 @@
 // src/utils/health.ts - API 健康检查
 
 import type { TokenUsage } from '../api/types.js';
-import { MiMoClient } from '../api/client.js';
+import { createProvider } from '../api/providers/index.js';
 
 export interface HealthCheckResult {
   ok: boolean;
@@ -20,7 +20,7 @@ export async function checkApiHealth(
   const start = Date.now();
 
   try {
-    const client = new MiMoClient(baseUrl, apiKey, model);
+    const client = createProvider('auto', apiKey, baseUrl, model);
     const result = await client.chat(
       [{ role: 'user', content: 'Reply with only "OK"' }],
       undefined,

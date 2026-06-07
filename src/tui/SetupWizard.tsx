@@ -67,6 +67,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ theme, onComplete, onC
               apiKey,
               baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
               model: MODELS[selectedModel].value,
+              providerType: 'auto' as const,
             },
             agent: {
               mode: (['plan', 'agent', 'yolo'] as const)[selectedMode],

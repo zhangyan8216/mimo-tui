@@ -1,7 +1,7 @@
 // src/agent/sub-agent.ts - Background sub-agent spawning
 
 import type { Message, TokenUsage } from '../api/types.js';
-import { MiMoClient } from '../api/client.js';
+import type { ProviderAdapter } from '../api/provider.js';
 import { ToolRegistry, type ToolContext } from '../tools/registry.js';
 import { AgentLoop } from './loop.js';
 import type { AgentMode } from '../api/types.js';
@@ -28,7 +28,7 @@ export class SubAgentManager {
   async spawn(
     name: string,
     prompt: string,
-    client: MiMoClient,
+    client: ProviderAdapter,
     tools: ToolRegistry,
     toolContext: ToolContext,
     mode: AgentMode,
