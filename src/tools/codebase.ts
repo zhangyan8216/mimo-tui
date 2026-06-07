@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import type { Tool, ToolContext } from './registry.js';
 import { analyzeDependencies, formatDepAnalysis } from '../analysis/deps-analyzer.js';
+import { AstParser, type ParsedFile } from '../analysis/ast-parser.js';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'build', 'out', '.next', '__pycache__', '.cache']);
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
@@ -362,6 +363,7 @@ export const codebaseTool: Tool = {
   description: `代码库分析工具。**收到新任务时应首先调用此工具**了解项目结构。
 - index: 扫描项目，返回文件数、行数、入口文件、导出符号
 - symbols: 查找符号定义。示例: {"action":"symbols","target":"App"}
+- ast-symbols: AST 精确符号查找。示例: {"action":"ast-symbols","target":"App"}
 - deps: 文件依赖关系。示例: {"action":"deps","target":"src/App.tsx"}
 - related: 相关文件。示例: {"action":"related","target":"src/App.tsx"}
 - deps-analysis: 项目依赖分析，检测未使用和未声明的依赖。示例: {"action":"deps-analysis"}`,
@@ -370,8 +372,8 @@ export const codebaseTool: Tool = {
     properties: {
       action: {
         type: 'string',
-        enum: ['index', 'symbols', 'deps', 'related', 'deps-analysis'],
-        description: '子命令: index(扫描), symbols(符号查找), deps(依赖图), related(关联文件), deps-analysis(依赖分析)',
+        enum: ['index', 'symbols', 'ast-symbols', 'deps', 'related', 'deps-analysis'],
+        description: '子命令: index(扫描), symbols(符号查找), ast-symbols(AST精确符号查找), deps(依赖图), related(关联文件), deps-analysis(依赖分析)',
       },
       target: {
         type: 'string',
@@ -413,6 +415,31 @@ export const codebaseTool: Tool = {
         }
         return formatSymbols(target, allFiles);
 
+      case 'ast-symbols': {
+        const parser = new AstParser(rootDir);
+        parser.initialize();
+        const filePaths = collectFiles(rootDir);
+        const parsedFiles: ParsedFile[] = [];
+        for (const fp of filePaths) {
+          const parsed = parser.parseFile(fp);
+          if (parsed) parsedFiles.push(parsed);
+        }
+        const searchTarget = target || '';
+        const results: string[] = [];
+        for (const file of parsedFiles) {
+          const matched = file.symbols.filter(s =>
+            !searchTarget || s.name.toLowerCase().includes(searchTarget.toLowerCase())
+          );
+          if (matched.length > 0) {
+            results.push(`\n${path.relative(rootDir, file.filePath)}:`);
+            for (const sym of matched) {
+              results.push(`  L${sym.line}: ${sym.exported ? 'export ' : ''}${sym.kind} ${sym.name}`);
+            }
+          }
+        }
+        return results.length > 0 ? `AST 符号查找 "${searchTarget}":\n${results.join('\n')}` : `未找到匹配 "${searchTarget}" 的符号`;
+      }
+
       case 'deps':
         if (!target) {
           return 'Error: "target" parameter is required for deps action. Provide a file path.';
@@ -430,7 +457,7 @@ export const codebaseTool: Tool = {
         return formatDepAnalysis(depAnalysis);
 
       default:
-        return `Error: Unknown action "${action}". Valid actions: index, symbols, deps, related, deps-analysis`;
+        return `Error: Unknown action "${action}". Valid actions: index, symbols, ast-symbols, deps, related, deps-analysis`;
     }
   },
 };

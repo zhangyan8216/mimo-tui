@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { log } from './logger.js';
+import { AstParser, type ParsedFile } from '../analysis/ast-parser.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '__pycache__', '.cache', '.mimo']);
 const SOURCE_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs']);
@@ -222,9 +223,72 @@ function extractSymbolReferences(text: string): string[] {
 }
 
 /**
- * 查找符号定义位置
+ * 查找符号定义位置（优先使用 AST 解析，回退到正则匹配）
  */
 function findSymbolDefinition(symbol: string, cwd: string): string | null {
+  // 优先使用 AST 解析
+  try {
+    const parser = new AstParser(cwd);
+    parser.initialize();
+
+    const filePaths = collectSourceFiles(cwd);
+    const parsedFiles: ParsedFile[] = [];
+    for (const fp of filePaths) {
+      const parsed = parser.parseFile(fp);
+      if (parsed) parsedFiles.push(parsed);
+    }
+
+    const matches = parser.findSymbol(symbol, parsedFiles);
+    if (matches.length > 0) {
+      // 优先返回 exported 的，否则返回第一个匹配
+      const match = matches[0];
+      return `${path.relative(cwd, match.filePath)}:${match.line} → ${match.exported ? 'export ' : ''}${match.kind} ${match.name}`;
+    }
+  } catch (err) {
+    log('debug', `AST symbol lookup failed for "${symbol}", falling back to regex: ${err}`);
+  }
+
+  // 回退到正则匹配
+  return findSymbolDefinitionRegex(symbol, cwd);
+}
+
+/**
+ * 收集源文件列表
+ */
+function collectSourceFiles(dir: string, maxFiles = 200): string[] {
+  const results: string[] = [];
+
+  function walk(current: string) {
+    if (results.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= maxFiles) return;
+      if (SKIP_DIRS.has(entry.name)) continue;
+      if (entry.name.startsWith('.') && entry.name !== '.env.example') continue;
+
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && SOURCE_EXTS.has(path.extname(entry.name))) {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  walk(dir);
+  return results;
+}
+
+/**
+ * 正则匹配回退方案
+ */
+function findSymbolDefinitionRegex(symbol: string, cwd: string): string | null {
   const searchDirs = ['src', 'lib', '.'];
   for (const dir of searchDirs) {
     const fullDir = path.join(cwd, dir);
