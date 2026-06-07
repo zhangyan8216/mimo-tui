@@ -28,10 +28,10 @@ export const MODES: Record<AgentMode, ModeConfig> = {
     name: 'agent',
     icon: '🤖',
     label: '智能体',
-    description: '交互模式，写操作需要审批。',
+    description: '自动执行，仅危险操作需确认。',
     autoApproveReads: true,
-    autoApproveWrites: false,
-    autoApproveShell: false,
+    autoApproveWrites: true,
+    autoApproveShell: false,  // shell 仍需确认（可能有危险命令）
     maxIterations: 32,
   },
   yolo: {
@@ -68,26 +68,18 @@ export function isReadOnlyTool(toolName: string): boolean {
 export function needsApproval(mode: AgentMode, toolName: string): boolean {
   const config = MODES[mode];
 
-  // 只读工具永远不需要审批
-  if (['read_file', 'glob', 'grep', 'todo', 'codebase'].includes(toolName)) {
-    return false;
-  }
+  // plan 模式：写工具被 isToolAllowedInMode 拦截，不需要审批检查
+  // agent 模式：autoApproveWrites=true，只有 shell 需要审批
+  // yolo 模式：全部自动批准
 
-  // 运维/分析工具不需要审批
-  if (['test_runner', 'coverage', 'benchmark', 'code_review', 'database'].includes(toolName)) {
-    return false;
-  }
-
-  // shell 需要审批（除非 yolo）
   if (toolName === 'shell') {
     return !config.autoApproveShell;
   }
 
-  // 写文件工具
+  // 其他工具按 autoApproveWrites 判断
   if (['write_file', 'edit_file', 'multi_edit', 'web_fetch', 'docker'].includes(toolName)) {
     return !config.autoApproveWrites;
   }
 
-  // 默认：agent 模式不审批，plan 模式不允许
   return false;
 }

@@ -345,11 +345,24 @@ export class AgentLoop {
       return { tc, error: `错误: 你还没有读取文件 "${args.path}"。请先用 read_file 读取。`, success: false };
     }
 
-    // Approval check for write tools
+    // Approval check - 智能审批：安全命令自动通过
     if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
-      const approved = await callbacks.requestApproval(tc.function.name, args);
-      if (!approved) {
-        return { tc, error: '已被用户拒绝', success: false };
+      // shell 命令：安全命令自动通过，危险命令才弹审批
+      if (tc.function.name === 'shell') {
+        const cmd = String(args.command || '').toLowerCase().trim();
+        if (isSafeCommand(cmd)) {
+          // 安全命令，自动通过
+        } else {
+          const approved = await callbacks.requestApproval(tc.function.name, args);
+          if (!approved) {
+            return { tc, error: '已被用户拒绝', success: false };
+          }
+        }
+      } else {
+        const approved = await callbacks.requestApproval(tc.function.name, args);
+        if (!approved) {
+          return { tc, error: '已被用户拒绝', success: false };
+        }
       }
     }
 
@@ -570,4 +583,46 @@ function detectRepetition(chunks: string[], threshold: number): boolean {
   }
 
   return repeatCount >= threshold;
+}
+
+/**
+ * 判断 shell 命令是否安全（自动通过，不需要审批）
+ */
+function isSafeCommand(cmd: string): boolean {
+  // 危险命令前缀 — 需要审批
+  const dangerous = [
+    'rm -rf', 'rm -r', 'rmdir /s', 'format ', 'mkfs',
+    'dd if=', 'shutdown', 'reboot', 'kill -9', 'killall',
+    'chmod 777', 'chown', 'curl.*|.*sh', 'wget.*|.*sh',
+    'drop table', 'drop database', 'truncate', 'delete from',
+    'git push --force', 'git reset --hard', 'git clean -fd',
+  ];
+  for (const d of dangerous) {
+    if (new RegExp(d, 'i').test(cmd)) return false;
+  }
+
+  // 安全命令前缀 — 自动通过
+  const safe = [
+    'git status', 'git diff', 'git log', 'git show', 'git branch',
+    'git add', 'git commit', 'git stash', 'git fetch', 'git pull',
+    'git merge', 'git rebase', 'git cherry-pick', 'git tag',
+    'npm ', 'npx ', 'node ', 'yarn ', 'pnpm ',
+    'python ', 'pip ', 'pytest', 'go ', 'cargo ',
+    'ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'rg',
+    'echo', 'pwd', 'which', 'where', 'whoami', 'date',
+    'tsc', 'eslint', 'prettier', 'vitest', 'jest',
+    'docker ps', 'docker logs', 'docker images',
+    'mkdir', 'cp ', 'mv ', 'touch', 'chmod',
+  ];
+  for (const s of safe) {
+    if (cmd.startsWith(s) || cmd.includes(s.trim())) return true;
+  }
+
+  // 包含管道/重定向但不危险 → 安全
+  if ((cmd.includes('|') || cmd.includes('>') || cmd.includes('&&')) && !dangerous.some(d => new RegExp(d, 'i').test(cmd))) {
+    return true;
+  }
+
+  // 默认：需要审批
+  return false;
 }
