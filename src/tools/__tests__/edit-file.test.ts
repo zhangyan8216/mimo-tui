@@ -41,7 +41,7 @@ describe('edit_file tool', () => {
       new_string: 'goodbye world',
     }, makeCtx());
 
-    expect(result).toContain('replaced 1 line(s) with 1 line(s)');
+    expect(result).toContain('替换 1 行为 1 行');
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('goodbye world\nfoo bar');
   });
 
@@ -108,7 +108,7 @@ describe('edit_file tool', () => {
       new_string: 'new1\nnew2\nnew3',
     }, makeCtx());
 
-    expect(result).toContain('replaced 2 line(s) with 3 line(s)');
+    expect(result).toContain('替换 2 行为 3 行');
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('new1\nnew2\nnew3\nline3');
   });
 

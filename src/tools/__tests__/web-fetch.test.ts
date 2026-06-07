@@ -71,7 +71,7 @@ describe('web_fetch tool', () => {
     );
 
     expect(result.length).toBeLessThan(200);
-    expect(result).toContain('truncated');
+    expect(result).toContain('已截断');
   });
 
   it('uses default max_length of 10000', async () => {
@@ -86,7 +86,7 @@ describe('web_fetch tool', () => {
       makeCtx(),
     );
 
-    expect(result).toContain('truncated');
+    expect(result).toContain('已截断');
     expect(result.length).toBeLessThan(15000);
   });
 
@@ -121,7 +121,7 @@ describe('web_fetch tool', () => {
 
     await expect(
       webFetchTool.execute({ url: 'https://example.com' }, makeCtx()),
-    ).rejects.toThrow('Failed to fetch URL');
+    ).rejects.toThrow('获取 URL 失败');
   });
 
   it('handles network error', async () => {
@@ -139,7 +139,7 @@ describe('web_fetch tool', () => {
 
     await expect(
       webFetchTool.execute({ url: 'https://example.com' }, makeCtx()),
-    ).rejects.toThrow('Unknown error');
+    ).rejects.toThrow('未知错误');
   });
 
   it('returns short content without truncation', async () => {
@@ -155,6 +155,6 @@ describe('web_fetch tool', () => {
     );
 
     expect(result).toBe('short');
-    expect(result).not.toContain('truncated');
+    expect(result).not.toContain('已截断');
   });
 });

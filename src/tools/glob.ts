@@ -20,7 +20,7 @@ export const globTool: Tool = {
       },
       limit: {
         type: 'number',
-        description: 'Maximum number of results (default: 100)',
+        description: '最大结果数（默认 100）',
       },
     },
     required: ['pattern'],
@@ -39,13 +39,13 @@ export const globTool: Tool = {
     });
 
     if (files.length === 0) {
-      return `No files found matching pattern: ${pattern}`;
+      return `未找到匹配模式的文件: ${pattern}`;
     }
 
     const limited = files.slice(0, limit);
     const header = files.length > limit
-      ? `Found ${files.length} files (showing first ${limit}):\n`
-      : `Found ${files.length} file(s):\n`;
+      ? `找到 ${files.length} 个文件（显示前 ${limit} 个）:\n`
+      : `找到 ${files.length} 个文件:\n`;
 
     return header + limited.map(f => path.relative(ctx.cwd, path.resolve(searchPath, f))).join('\n');
   },

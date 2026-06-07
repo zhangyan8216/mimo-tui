@@ -47,7 +47,7 @@ describe('shell tool', () => {
       makeCtx(),
     );
     expect(result).toContain('hello');
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   it('captures stdout output', async () => {
@@ -65,7 +65,7 @@ describe('shell tool', () => {
       { command: 'node -e "process.stderr.write(\'error output\'); process.exit(0)"' },
       makeCtx(),
     );
-    expect(result).toContain('[STDERR]');
+    expect(result).toContain('[错误输出]');
     expect(result).toContain('error output');
   });
 
@@ -74,7 +74,7 @@ describe('shell tool', () => {
       { command: 'node -e "process.exit(42)"' },
       makeCtx(),
     );
-    expect(result).toContain('[Exit code: 42]');
+    expect(result).toContain('[退出码: 42]');
   });
 
   it('returns exit code 0 on success', async () => {
@@ -82,7 +82,7 @@ describe('shell tool', () => {
       { command: 'node -e "process.exit(0)"' },
       makeCtx(),
     );
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   it('times out on a long-running command', async () => {
@@ -92,7 +92,7 @@ describe('shell tool', () => {
         { command: 'node -e "setTimeout(() => {}, 30000)"', timeout: 200 },
         makeCtx(),
       ),
-    ).rejects.toThrow('timed out');
+    ).rejects.toThrow('超时');
   });
 
   it('uses default timeout of 60000ms', async () => {
@@ -102,7 +102,7 @@ describe('shell tool', () => {
       { command: 'echo fast' },
       makeCtx(),
     );
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   it('caps timeout at 300000ms', async () => {
@@ -111,7 +111,7 @@ describe('shell tool', () => {
       { command: 'echo ok', timeout: 999999 },
       makeCtx(),
     );
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   describe('platform-specific shell selection', () => {
@@ -132,7 +132,7 @@ describe('shell tool', () => {
         { command: 'echo unix-test' },
         makeCtx(),
       );
-      expect(result).toContain('[Exit code: 0]');
+      expect(result).toContain('[退出码: 0]');
     });
 
     it('uses bash on darwin', async () => {
@@ -141,7 +141,7 @@ describe('shell tool', () => {
         { command: 'echo mac-test' },
         makeCtx(),
       );
-      expect(result).toContain('[Exit code: 0]');
+      expect(result).toContain('[退出码: 0]');
     });
   });
 

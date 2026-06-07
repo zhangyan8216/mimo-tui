@@ -55,7 +55,7 @@ describe('multi_edit tool', () => {
         makeCtx(),
       );
 
-      expect(result).toContain('Applied 1 edit(s)');
+      expect(result).toContain('已应用 1 处编辑');
       expect(fs.readFileSync(filePath, 'utf-8')).toBe('goodbye world');
     });
 
@@ -75,7 +75,7 @@ describe('multi_edit tool', () => {
         makeCtx(),
       );
 
-      expect(result).toContain('Applied 2 edit(s)');
+      expect(result).toContain('已应用 2 处编辑');
       expect(fs.readFileSync(fileA, 'utf-8')).toBe('FOO bar');
       expect(fs.readFileSync(fileB, 'utf-8')).toBe('baz QUX');
     });
@@ -91,7 +91,7 @@ describe('multi_edit tool', () => {
         makeCtx(),
       );
 
-      expect(result).toContain('Applied 1 edit(s)');
+      expect(result).toContain('已应用 1 处编辑');
       expect(fs.readFileSync(filePath, 'utf-8')).toBe('new1\nnew2\nnew3\nline3');
     });
   });
@@ -224,7 +224,7 @@ describe('multi_edit tool', () => {
         makeCtx(),
       );
 
-      expect(result).toContain('Applied 3 edit(s)');
+      expect(result).toContain('已应用 3 处编辑');
       expect(fs.readFileSync(fileA, 'utf-8')).toBe('ALPHA');
       expect(fs.readFileSync(fileB, 'utf-8')).toBe('BETA');
       expect(fs.readFileSync(fileC, 'utf-8')).toBe('GAMMA');

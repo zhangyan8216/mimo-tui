@@ -20,7 +20,7 @@ try {
 
 /** Format rows as an ASCII table */
 function formatTable(columns: string[], rows: unknown[][]): string {
-  if (rows.length === 0) return '(empty result set)';
+  if (rows.length === 0) return '（空结果集）';
 
   // Calculate column widths
   const widths = columns.map((col, i) => {
@@ -60,7 +60,7 @@ function queryWithLib(dbPath: string, sql: string): string {
 
     if (isSelect) {
       const rows = stmt.all();
-      if (rows.length === 0) return '(empty result set)';
+      if (rows.length === 0) return '（空结果集）';
 
       const columns = stmt.columns().map((c: { name: string }) => c.name);
       const dataRows: unknown[][] = rows.map(row =>
@@ -71,14 +71,14 @@ function queryWithLib(dbPath: string, sql: string): string {
       const displayRows = dataRows.slice(0, MAX_ROWS);
 
       let result = formatTable(columns, displayRows);
-      result += `\n\n(${displayRows.length} rows`;
-      if (truncated) result += `, showing first ${MAX_ROWS} of ${dataRows.length}`;
+      result += `\n\n(${displayRows.length} 行`;
+      if (truncated) result += `，显示前 ${MAX_ROWS}/${dataRows.length}`;
       result += ')';
 
       return result;
     } else {
       const info = stmt.run();
-      return `OK (${info.changes} rows affected)`;
+      return `成功（${info.changes} 行受影响）`;
     }
   } finally {
     db.close();
@@ -93,7 +93,7 @@ function queryWithCli(dbPath: string, sql: string): string {
       `sqlite3 -header -column "${dbPath}" "${escapedSql}"`,
       { encoding: 'utf-8', timeout: 30_000, maxBuffer: MAX_OUTPUT }
     );
-    return result.trim() || '(empty result set)';
+    return result.trim() || '（空结果集）';
   } catch (err) {
     throw new Error(`sqlite3 CLI error: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -158,13 +158,13 @@ function exportData(
       fs.writeFileSync(outFile, JSON.stringify({ raw: rows }), 'utf-8');
     }
 
-    return `Exported to: ${outFile}`;
+    return `已导出到: ${outFile}`;
   }
 
   if (format === 'table') {
     const outFile = path.join(tmpDir, `${baseName}_${table}_${timestamp}.txt`);
     fs.writeFileSync(outFile, data, 'utf-8');
-    return `Exported to: ${outFile}`;
+    return `已导出到: ${outFile}`;
   }
 
   // Default: CSV export
@@ -192,7 +192,7 @@ function exportData(
 
       const outFile = path.join(tmpDir, `${baseName}_${table}_${timestamp}.csv`);
       fs.writeFileSync(outFile, csvLines.join('\n'), 'utf-8');
-      return `Exported ${rows.length} rows to: ${outFile}`;
+      return `已导出 ${rows.length} 行到: ${outFile}`;
     } finally {
       db.close();
     }
@@ -205,7 +205,7 @@ function exportData(
       `sqlite3 -header -csv "${dbPath}" "SELECT * FROM ${table}" > "${outFile}"`,
       { timeout: 30_000 }
     );
-    return `Exported to: ${outFile}`;
+    return `已导出到: ${outFile}`;
   } catch (err) {
     throw new Error(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
   }

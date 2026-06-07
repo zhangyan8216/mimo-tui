@@ -72,14 +72,14 @@ function ripgrepSearch(
 
     proc.on('close', (code) => {
       if (code === 1) {
-        resolve('No matches found.');
+        resolve('未找到匹配项。');
         return;
       }
       if (code !== 0) {
         reject(new Error(stderr));
         return;
       }
-      resolve(stdout.trim() || 'No matches found.');
+      resolve(stdout.trim() || '未找到匹配项。');
     });
 
     proc.on('error', reject);
@@ -94,7 +94,7 @@ function builtinSearch(
   try {
     regex = new RegExp(pattern, caseInsensitive ? 'gi' : 'g');
   } catch {
-    return `Invalid regex pattern: ${pattern}`;
+    return `无效的正则表达式: ${pattern}`;
   }
   const results: string[] = [];
   const limit = maxResults || 50;
@@ -165,7 +165,7 @@ function builtinSearch(
 
   return results.length > 0
     ? results.join('\n')
-    : 'No matches found.';
+    : '未找到匹配项。';
 }
 
 function matchesGlob(filename: string, pattern: string): boolean {

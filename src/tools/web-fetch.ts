@@ -38,15 +38,15 @@ export const webFetchTool: Tool = {
 
       let text = await response.text();
       if (text.length > maxLength) {
-        text = text.slice(0, maxLength) + '\n... (truncated)';
+        text = text.slice(0, maxLength) + '\n... (已截断)';
       }
 
       return text;
     } catch (error) {
       if (error instanceof Error) {
-        throw new Error(`Failed to fetch URL: ${error.message}`);
+        throw new Error(`获取 URL 失败: ${error.message}`);
       }
-      throw new Error('Failed to fetch URL: Unknown error');
+      throw new Error('获取 URL 失败: 未知错误');
     }
   },
 };

@@ -135,7 +135,7 @@ describe('database tool', () => {
       expect(result).toContain('Alice');
       expect(result).toContain('Bob');
       expect(result).toContain('Charlie');
-      expect(result).toContain('rows');
+      expect(result).toContain('行');
     });
 
     it('throws when sql is missing', async () => {
@@ -190,11 +190,11 @@ describe('database tool', () => {
         { action: 'export', db_path: dbPath, table: 'users', format: 'csv' },
         ctx,
       );
-      expect(result).toContain('Exported');
+      expect(result).toContain('已导出');
       expect(result).toContain('.csv');
 
       // Verify the file exists and has content
-      const match = result.match(/Exported.*?to: (.+)$/m);
+      const match = result.match(/已导出.*?到: (.+)$/m);
       expect(match).toBeTruthy();
       const filePath = match![1].trim();
       expect(fs.existsSync(filePath)).toBe(true);
@@ -208,10 +208,10 @@ describe('database tool', () => {
         { action: 'export', db_path: dbPath, table: 'users', format: 'json' },
         ctx,
       );
-      expect(result).toContain('Exported');
+      expect(result).toContain('已导出');
       expect(result).toContain('.json');
 
-      const match = result.match(/Exported.*?to: (.+)$/m);
+      const match = result.match(/已导出.*?到: (.+)$/m);
       expect(match).toBeTruthy();
       const filePath = match![1].trim();
       expect(fs.existsSync(filePath)).toBe(true);

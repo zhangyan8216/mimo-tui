@@ -202,34 +202,34 @@ function parseCoverageOutput(stdout: string, stderr: string, framework: string, 
 /** Format coverage summary as human-readable text */
 function formatCoverageSummary(summary: CoverageSummary): string {
   const lines: string[] = [];
-  const statusIcon = summary.passesThreshold ? '[PASS]' : '[FAIL]';
+  const statusIcon = summary.passesThreshold ? '[通过]' : '[失败]';
 
-  lines.push(`${statusIcon} Coverage Report (${summary.framework})`);
+  lines.push(`${statusIcon} 覆盖率报告（${summary.framework}）`);
   lines.push('');
 
   if (summary.lineCoverage) {
-    lines.push(`Line Coverage: ${summary.lineCoverage}`);
+    lines.push(`行覆盖率: ${summary.lineCoverage}`);
   }
 
   if (summary.totalStatements !== null) {
-    lines.push(`Statements: ${summary.coveredStatements}/${summary.totalStatements}`);
+    lines.push(`语句: ${summary.coveredStatements}/${summary.totalStatements}`);
   }
   if (summary.totalBranches !== null) {
-    lines.push(`Branches: ${summary.coveredBranches}/${summary.totalBranches}`);
+    lines.push(`分支: ${summary.coveredBranches}/${summary.totalBranches}`);
   }
   if (summary.totalFunctions !== null) {
-    lines.push(`Functions: ${summary.coveredFunctions}/${summary.totalFunctions}`);
+    lines.push(`函数: ${summary.coveredFunctions}/${summary.totalFunctions}`);
   }
   if (summary.totalLines !== null) {
-    lines.push(`Lines: ${summary.coveredLines}/${summary.totalLines}`);
+    lines.push(`行: ${summary.coveredLines}/${summary.totalLines}`);
   }
 
   if (summary.threshold !== null) {
     lines.push('');
     if (summary.passesThreshold) {
-      lines.push(`Threshold: ${summary.threshold}% - PASSED`);
+      lines.push(`阈值: ${summary.threshold}% - 通过`);
     } else {
-      lines.push(`Threshold: ${summary.threshold}% - FAILED (current: ${summary.lineCoverage || 'unknown'})`);
+      lines.push(`阈值: ${summary.threshold}% - 未通过（当前: ${summary.lineCoverage || '未知'}）`);
     }
   }
 
@@ -276,7 +276,7 @@ export const coverageTool: Tool = {
       const coverageDirs = ['coverage', 'htmlcov', '.coverage'];
       for (const dir of coverageDirs) {
         if (hasFile(dir)) {
-          reports.push(`Found: ${dir}/`);
+          reports.push(`找到: ${dir}/`);
         }
       }
 
@@ -284,12 +284,12 @@ export const coverageTool: Tool = {
       const coverageFiles = ['coverage.out', 'coverage.lcov', 'lcov.info', '.coverage'];
       for (const file of coverageFiles) {
         if (hasFile(file)) {
-          reports.push(`Found: ${file}`);
+          reports.push(`找到: ${file}`);
         }
       }
 
       if (reports.length === 0) {
-        return 'No existing coverage reports found. Run coverage first with action=run.\nCommon output directories: coverage/, htmlcov/, .coverage';
+        return '未找到已有的覆盖率报告。请先执行 action=run 运行覆盖率。';
       }
 
       // Try to read coverage summary from text files
@@ -304,13 +304,13 @@ export const coverageTool: Tool = {
         } catch { /* ignore */ }
       }
 
-      return `Existing coverage reports:\n${reports.join('\n')}${summaryText}\n\nTo view HTML report, open coverage/index.html or htmlcov/index.html in a browser.`;
+      return `已有的覆盖率报告:\n${reports.join('\n')}${summaryText}\n\n查看 HTML 报告，请在浏览器中打开 coverage/index.html 或 htmlcov/index.html。`;
     }
 
     // 'run' action: detect framework and run coverage
     const detection = detectCoverageTool(ctx.cwd);
     if (!detection) {
-      return 'No test framework with coverage support detected.\nSupported: vitest (--coverage), jest (--coverage), pytest (--cov), go test (-coverprofile), cargo tarpaulin.\nYou can add a "test:coverage" or "coverage" script to package.json.';
+      return '未检测到支持覆盖率的测试框架。支持: vitest, jest, pytest, go test, cargo tarpaulin。';
     }
 
     let command = detection.coverageCommand;
@@ -376,14 +376,14 @@ export const coverageTool: Tool = {
         const coverageLines = extractCoverageLines(stdout, stderr, detection.framework);
         if (coverageLines) {
           parts.push('');
-          parts.push('--- Coverage Details ---');
+          parts.push('--- 覆盖率详情 ---');
           parts.push(coverageLines);
         }
 
         // If failed, include some error output
         if (code !== 0 && stderr.trim()) {
           parts.push('');
-          parts.push('--- Error Output (first 2KB) ---');
+          parts.push('--- 错误输出（前 2KB）---');
           parts.push(stderr.trimEnd().slice(0, 2_000));
         }
 

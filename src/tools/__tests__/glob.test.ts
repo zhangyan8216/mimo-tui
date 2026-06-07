@@ -49,7 +49,7 @@ describe('glob tool', () => {
       { pattern: '**/*.ts' },
       makeCtx(),
     );
-    expect(result).toContain('Found');
+    expect(result).toContain('找到');
     expect(result).toContain('index.ts');
   });
 
@@ -67,7 +67,7 @@ describe('glob tool', () => {
       { pattern: '**/*.xyz' },
       makeCtx(),
     );
-    expect(result).toBe('No files found matching pattern: **/*.xyz');
+    expect(result).toBe('未找到匹配模式的文件: **/*.xyz');
   });
 
   it('uses custom path parameter', async () => {
@@ -102,7 +102,7 @@ describe('glob tool', () => {
       { pattern: '**/*.json' },
       makeCtx(),
     );
-    expect(result).toContain('Found 1 file(s):');
+    expect(result).toContain('找到 1 个文件:');
   });
 
   it('respects limit parameter', async () => {
@@ -111,7 +111,7 @@ describe('glob tool', () => {
       makeCtx(),
     );
     // Should show limited results
-    expect(result).toContain('showing first 2');
+    expect(result).toContain('显示前 2 个');
   });
 
   it('has correct tool name', () => {

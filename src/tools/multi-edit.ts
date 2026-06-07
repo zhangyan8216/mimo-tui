@@ -96,10 +96,10 @@ export const multiEditTool: Tool = {
       fs.writeFileSync(v.resolved, updated, 'utf-8');
       const oldLines = v.oldText.split('\n').length;
       const newLines = v.newText.split('\n').length;
-      results.push(`${v.resolved}: replaced ${oldLines} line(s) with ${newLines} line(s)`);
+      results.push(`${v.resolved}: 替换 ${oldLines} 行为 ${newLines} 行`);
     }
 
-    return `Applied ${results.length} edit(s):\n${results.join('\n')}`;
+    return `已应用 ${results.length} 处编辑:\n${results.join('\n')}`;
   },
 };
 

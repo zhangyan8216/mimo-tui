@@ -205,26 +205,26 @@ function parseTestResults(stdout: string, stderr: string, exitCode: number, fram
 /** Format a human-readable summary */
 function formatResults(results: TestResults): string {
   const lines: string[] = [];
-  const statusIcon = results.success ? '[PASS]' : '[FAIL]';
+  const statusIcon = results.success ? '[通过]' : '[失败]';
 
-  lines.push(`${statusIcon} Test Results (${results.framework})`);
-  lines.push(`Command: ${results.command}`);
+  lines.push(`${statusIcon} 测试结果（${results.framework}）`);
+  lines.push(`命令: ${results.command}`);
   lines.push('');
 
   if (results.total !== null) {
     const parts: string[] = [];
-    if (results.passed !== null && results.passed > 0) parts.push(`${results.passed} passed`);
-    if (results.failed !== null && results.failed > 0) parts.push(`${results.failed} failed`);
-    if (results.skipped !== null && results.skipped > 0) parts.push(`${results.skipped} skipped`);
-    if (results.errors !== null && results.errors > 0) parts.push(`${results.errors} errors`);
-    lines.push(`Results: ${parts.join(', ') || 'no tests found'} (${results.total} total)`);
+    if (results.passed !== null && results.passed > 0) parts.push(`${results.passed} 通过`);
+    if (results.failed !== null && results.failed > 0) parts.push(`${results.failed} 失败`);
+    if (results.skipped !== null && results.skipped > 0) parts.push(`${results.skipped} 跳过`);
+    if (results.errors !== null && results.errors > 0) parts.push(`${results.errors} 错误`);
+    lines.push(`结果: ${parts.join(', ') || '未找到测试'}（共 ${results.total} 个）`);
   }
 
   if (results.duration) {
-    lines.push(`Duration: ${results.duration}`);
+    lines.push(`耗时: ${results.duration}`);
   }
 
-  lines.push(`Exit code: ${results.exitCode}`);
+  lines.push(`退出码: ${results.exitCode}`);
 
   return lines.join('\n');
 }
@@ -269,7 +269,7 @@ export const testRunnerTool: Tool = {
     } else {
       detection = detectTestFramework(ctx.cwd);
       if (!detection) {
-        return 'No test framework detected. Supported frameworks: jest, vitest, mocha, pytest, go test, cargo test. You can also provide a custom command via the "command" parameter.';
+        return '未检测到测试框架。支持: jest, vitest, mocha, pytest, go test, cargo test。可通过 "command" 参数自定义测试命令。';
       }
       command = detection.command;
     }
@@ -324,7 +324,7 @@ export const testRunnerTool: Tool = {
 
       const timer = setTimeout(() => {
         proc.kill();
-        reject(new Error(`Test command timed out after ${timeout}ms`));
+        reject(new Error(`测试命令执行超时（${timeout}ms）`));
       }, timeout);
 
       proc.on('close', (code) => {
@@ -347,18 +347,18 @@ export const testRunnerTool: Tool = {
         if (verbose) {
           const parts = [summary];
           if (stdout.trim()) {
-            parts.push('\n--- STDOUT ---');
+            parts.push('\n--- 标准输出 ---');
             parts.push(stdout.trimEnd().slice(-30_000)); // last 30KB for verbose
           }
           if (stderr.trim()) {
-            parts.push('\n--- STDERR ---');
+            parts.push('\n--- 错误输出 ---');
             parts.push(stderr.trimEnd().slice(-10_000));
           }
           resolve(parts.join('\n'));
         } else {
           // In non-verbose mode, still include stderr if tests failed (usually has error details)
           if (!results.success && stderr.trim()) {
-            resolve(`${summary}\n\n--- Error Output (first 2KB) ---\n${stderr.trimEnd().slice(0, 2_000)}`);
+            resolve(`${summary}\n\n--- 错误输出（前 2KB）---\n${stderr.trimEnd().slice(0, 2_000)}`);
           } else {
             resolve(summary);
           }
@@ -367,7 +367,7 @@ export const testRunnerTool: Tool = {
 
       proc.on('error', (err) => {
         clearTimeout(timer);
-        reject(new Error(`Failed to run test command: ${err.message}`));
+        reject(new Error(`运行测试命令失败：${err.message}`));
       });
     });
   },

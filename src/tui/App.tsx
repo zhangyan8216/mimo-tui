@@ -261,7 +261,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     setMode(newConfig.agent.mode);
     setOverlay('none');
     saveConfig(newConfig);
-    sessionManager.current.createSession('New Session', newConfig.provider.model, newConfig.agent.mode);
+    sessionManager.current.createSession('新会话', newConfig.provider.model, newConfig.agent.mode);
   }, []);
 
   // Ref for handleSubmit to break circular dependency between handleSlashCommand and handleSubmit
@@ -363,7 +363,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     // Check for skill triggers
     const skill = findSkillByTrigger(skills.current, text);
     if (skill) {
-      processedText = `${skill.content}\n\nUser request: ${text}`;
+      processedText = `${skill.content}\n\n用户请求: ${text}`;
     }
 
     const userMessage: Message = { role: 'user', content: processedText };
@@ -591,7 +591,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       });
 
       // 自动会话命名：第一条消息后自动命名
-      if (sessionManager.current.current && sessionManager.current.current.name === 'New Session') {
+      if (sessionManager.current.current && sessionManager.current.current.name === '新会话') {
         const name = processedText.slice(0, 30) + (processedText.length > 30 ? '...' : '');
         sessionManager.current.renameSession(name);
       }
@@ -657,7 +657,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       return;
     }
     if (key.ctrl && input === 'n') {
-      sessionManager.current.createSession('New Session', configRef.current.provider.model, modeRef.current);
+      sessionManager.current.createSession('新会话', configRef.current.provider.model, modeRef.current);
       setMessages([]);
       setUsage({ ...EMPTY_USAGE });
       return;
@@ -731,7 +731,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   // Create initial session + config validation
   useEffect(() => {
     if (!needsSetup) {
-      sessionManager.current.createSession('New Session', config.provider.model, mode);
+      sessionManager.current.createSession('新会话', config.provider.model, mode);
       globalHooks.trigger('on-session-start', {});
 
       // 配置验证
@@ -829,7 +829,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
               }
             }}
             disabled={false}
-            placeholder={isStreaming ? 'MiMo is thinking... (Ctrl+C to cancel)' : 'Type a message...'}
+            placeholder={isStreaming ? 'MiMo 思考中...（Ctrl+C 取消）' : '输入消息...'}
             slashCommands={[
               'new', 'fork', 'save', 'list', 'mode', 'model', 'clear', 'compact', 'help', 'retry', 'undo',
               'export', 'git', 'tree', 'project', 'cost', 'theme', 'debug', 'health', 'doctor',

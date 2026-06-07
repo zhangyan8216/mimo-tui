@@ -154,18 +154,18 @@ function formatIndex(files: FileInfo[]): string {
   );
 
   const lines: string[] = [
-    `Project Index`,
+    `项目索引`,
     `============`,
-    `Files: ${files.length}`,
-    `Total lines: ${totalLines}`,
-    `Exported symbols: ${exportedSymbols.length}`,
+    `文件: ${files.length}`,
+    `总行数: ${totalLines}`,
+    `导出符号: ${exportedSymbols.length}`,
     '',
   ];
 
   if (entryPoints.length > 0) {
-    lines.push('Entry Points:');
+    lines.push('入口文件:');
     for (const ep of entryPoints) {
-      lines.push(`  ${ep.path} (${ep.lines} lines)`);
+      lines.push(`  ${ep.path} (${ep.lines} 行)`);
     }
     lines.push('');
   }
@@ -178,22 +178,22 @@ function formatIndex(files: FileInfo[]): string {
     byDir.get(dir)!.push(f);
   }
 
-  lines.push('Directory Structure:');
+  lines.push('目录结构:');
   const dirs = [...byDir.keys()].sort();
   for (const dir of dirs.slice(0, 30)) {
     const dirFiles = byDir.get(dir)!;
     const dirLines = dirFiles.reduce((sum, f) => sum + f.lines, 0);
-    lines.push(`  ${dir}/ (${dirFiles.length} files, ${dirLines} lines)`);
+    lines.push(`  ${dir}/ (${dirFiles.length} 个文件, ${dirLines} 行)`);
   }
 
   if (exportedSymbols.length > 0) {
     lines.push('');
-    lines.push('Top Exported Symbols:');
+    lines.push('主要导出符号:');
     for (const sym of exportedSymbols.slice(0, 50)) {
       lines.push(`  ${sym}`);
     }
     if (exportedSymbols.length > 50) {
-      lines.push(`  ... and ${exportedSymbols.length - 50} more`);
+      lines.push(`  ...还有 ${exportedSymbols.length - 50} 个`);
     }
   }
 
@@ -224,10 +224,10 @@ function formatSymbols(target: string, allFiles: FileInfo[]): string {
   }
 
   if (results.length === 0) {
-    return `No symbols found matching: ${target}`;
+    return `未找到匹配的符号: ${target}`;
   }
 
-  const header = `Symbol definitions matching "${target}":`;
+  const header = `符号定义匹配 "${target}":`;
   return header + results.join('\n');
 }
 
@@ -236,7 +236,7 @@ function formatDeps(filePath: string, allFiles: FileInfo[]): string {
   const file = allFiles.find(f => f.path === normalizedTarget || f.path.endsWith('/' + normalizedTarget));
 
   if (!file) {
-    return `File not found in index: ${filePath}. Run 'index' action first.`;
+    return `索引中未找到文件: ${filePath}。请先运行 'index' 操作。`;
   }
 
   const lines: string[] = [
@@ -246,13 +246,13 @@ function formatDeps(filePath: string, allFiles: FileInfo[]): string {
   ];
 
   // What this file imports
-  lines.push('Imports:');
+  lines.push('导入:');
   if (file.imports.length === 0) {
-    lines.push('  (none)');
+    lines.push('  （无）');
   } else {
     for (const imp of file.imports) {
       const resolved = resolveImportPath(imp, file.path, allFiles.map(f => f.path));
-      const localTag = resolved ? ' [local]' : ' [external]';
+      const localTag = resolved ? ' [本地]' : ' [外部]';
       lines.push(`  ${imp}${localTag}`);
     }
   }
@@ -273,15 +273,15 @@ function formatDeps(filePath: string, allFiles: FileInfo[]): string {
     }
   }
 
-  lines.push('Imported by:');
+  lines.push('被引用:');
   if (importers.length === 0) {
-    lines.push('  (none found in project)');
+    lines.push('  （项目中未找到引用）');
   } else {
     for (const imp of importers.slice(0, 30)) {
       lines.push(`  ${imp}`);
     }
     if (importers.length > 30) {
-      lines.push(`  ... and ${importers.length - 30} more`);
+      lines.push(`  ...还有 ${importers.length - 30} 个`);
     }
   }
 
@@ -293,7 +293,7 @@ function formatRelated(filePath: string, allFiles: FileInfo[]): string {
   const file = allFiles.find(f => f.path === normalizedTarget || f.path.endsWith('/' + normalizedTarget));
 
   if (!file) {
-    return `File not found in index: ${filePath}. Run 'index' action first.`;
+    return `索引中未找到文件: ${filePath}。请先运行 'index' 操作。`;
   }
 
   const lines: string[] = [
@@ -308,7 +308,7 @@ function formatRelated(filePath: string, allFiles: FileInfo[]): string {
     .filter(f => path.dirname(f.path) === fileDir && f.path !== file.path)
     .map(f => f.path);
   if (sameDir.length > 0) {
-    lines.push('Same directory:');
+    lines.push('同一目录:');
     for (const f of sameDir.slice(0, 15)) {
       lines.push(`  ${f}`);
     }
@@ -330,7 +330,7 @@ function formatRelated(filePath: string, allFiles: FileInfo[]): string {
 
     const sorted = [...sharedFiles.entries()].sort((a, b) => b[1] - a[1]);
     if (sorted.length > 0) {
-      lines.push('Shared imports (files with common dependencies):');
+      lines.push('共同导入（具有相同依赖的文件）:');
       for (const [f, count] of sorted.slice(0, 10)) {
         lines.push(`  ${f} (${count} shared)`);
       }
@@ -349,7 +349,7 @@ function formatRelated(filePath: string, allFiles: FileInfo[]): string {
     .map(f => f.path);
 
   if (similarNames.length > 0) {
-    lines.push('Similar names:');
+    lines.push('相似文件名:');
     for (const f of similarNames.slice(0, 10)) {
       lines.push(`  ${f}`);
     }
@@ -396,7 +396,7 @@ export const codebaseTool: Tool = {
     // Collect and analyze files
     const filePaths = collectFiles(rootDir);
     if (filePaths.length === 0) {
-      return 'No source files found in the project.';
+      return '项目中未找到源文件。';
     }
 
     const allFiles: FileInfo[] = [];
@@ -411,7 +411,7 @@ export const codebaseTool: Tool = {
 
       case 'symbols':
         if (!target) {
-          return 'Error: "target" parameter is required for symbols action. Provide a file path or symbol name.';
+          return '错误: "target" 参数在 symbols 操作中是必需的。请提供文件路径或符号名称。';
         }
         return formatSymbols(target, allFiles);
 
@@ -442,13 +442,13 @@ export const codebaseTool: Tool = {
 
       case 'deps':
         if (!target) {
-          return 'Error: "target" parameter is required for deps action. Provide a file path.';
+          return '错误: "target" 参数在 deps 操作中是必需的。请提供文件路径。';
         }
         return formatDeps(target, allFiles);
 
       case 'related':
         if (!target) {
-          return 'Error: "target" parameter is required for related action. Provide a file path.';
+          return '错误: "target" 参数在 related 操作中是必需的。请提供文件路径。';
         }
         return formatRelated(target, allFiles);
 
@@ -457,7 +457,7 @@ export const codebaseTool: Tool = {
         return formatDepAnalysis(depAnalysis);
 
       default:
-        return `Error: Unknown action "${action}". Valid actions: index, symbols, ast-symbols, deps, related, deps-analysis`;
+        return `错误: 未知操作 "${action}"。有效操作: index, symbols, ast-symbols, deps, related, deps-analysis`;
     }
   },
 };

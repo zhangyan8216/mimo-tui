@@ -89,7 +89,7 @@ export const HelpOverlay: React.FC<HelpOverlayProps> = ({ theme, onClose }) => {
         <Text>  <K>/git sync</K>               <Text color={theme.fg.sub}>同步远程仓库</Text></Text>
         <Text>  <K>/git graph</K>              <Text color={theme.fg.sub}>可视化提交图</Text></Text>
 
-        <Text color={theme.tone.accent} bold>Git Worktree / Stash</Text>
+        <Text color={theme.tone.accent} bold>Git 工作树 / 暂存</Text>
         <Text>  <K>/git worktree list</K>          <Text color={theme.fg.sub}>列出所有工作树</Text></Text>
         <Text>  <K>/git worktree add &lt;branch&gt;</K>  <Text color={theme.fg.sub}>创建新工作树</Text></Text>
         <Text>  <K>/git worktree remove &lt;name&gt;</K> <Text color={theme.fg.sub}>移除工作树</Text></Text>

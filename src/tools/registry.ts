@@ -51,7 +51,7 @@ export class ToolRegistry {
         tool_call_id: '',
         name,
         output: '',
-        error: `Unknown tool: ${name}`,
+        error: `未知工具: ${name}`,
       };
     }
 

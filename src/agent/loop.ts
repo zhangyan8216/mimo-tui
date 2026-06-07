@@ -331,7 +331,7 @@ export class AgentLoop {
   ): Promise<{ tc: ToolCall; error?: string; success: boolean }> {
     // Validation
     if (!isToolAllowedInMode(mode, tc.function.name)) {
-      return { tc, error: `Not available in ${mode} mode`, success: false };
+      return { tc, error: `在 ${mode} 模式下不可用`, success: false };
     }
 
     const validation = this.validateToolCall(tc.function.name, args);
@@ -349,7 +349,7 @@ export class AgentLoop {
     if (needsApproval(mode, tc.function.name) && callbacks.requestApproval) {
       const approved = await callbacks.requestApproval(tc.function.name, args);
       if (!approved) {
-        return { tc, error: 'Denied by user', success: false };
+        return { tc, error: '已被用户拒绝', success: false };
       }
     }
 

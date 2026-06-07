@@ -38,7 +38,7 @@ describe('read_file tool', () => {
     fs.writeFileSync(filePath, 'line1\nline2\nline3', 'utf-8');
 
     const result = await readFileTool.execute({ path: filePath }, makeCtx());
-    expect(result).toContain('[Lines 1-3 of 3]');
+    expect(result).toContain('[第 1-3 行，共 3 行]');
     expect(result).toContain('1\tline1');
     expect(result).toContain('2\tline2');
     expect(result).toContain('3\tline3');
@@ -50,12 +50,12 @@ describe('read_file tool', () => {
     fs.writeFileSync(filePath, lines, 'utf-8');
 
     const result = await readFileTool.execute({ path: filePath, offset: 2, limit: 3 }, makeCtx());
-    expect(result).toContain('[Lines 3-5 of 10]');
+    expect(result).toContain('[第 3-5 行，共 10 行]');
     expect(result).toContain('3\tline3');
     expect(result).toContain('4\tline4');
     expect(result).toContain('5\tline5');
     expect(result).not.toContain('line1');
-    expect(result).toContain('(5 more lines');
+    expect(result).toContain('还有 5 行');
   });
 
   it('throws file not found error for missing file', async () => {
@@ -97,7 +97,7 @@ describe('read_file tool', () => {
 
     // offset=10 gets clamped to min(10, lines.length-1) = 1, limit = min(2000, 2-1) = 1
     const result = await readFileTool.execute({ path: filePath, offset: 10 }, makeCtx());
-    expect(result).toContain('[Lines 2-2 of 2]');
+    expect(result).toContain('[第 2-2 行，共 2 行]');
     expect(result).toContain('2\tline2');
   });
 
@@ -107,6 +107,6 @@ describe('read_file tool', () => {
     fs.writeFileSync(filePath, lines, 'utf-8');
 
     const result = await readFileTool.execute({ path: filePath, limit: 10 }, makeCtx());
-    expect(result).toContain('(90 more lines');
+    expect(result).toContain('还有 90 行');
   });
 });

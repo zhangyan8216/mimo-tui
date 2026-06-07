@@ -38,8 +38,8 @@ export const writeFileTool: Tool = {
 
     const lines = content.split('\n').length;
     return existed
-      ? `Updated ${validation.resolved} (${lines} lines)`
-      : `Created ${validation.resolved} (${lines} lines)`;
+      ? `已更新 ${validation.resolved}（${lines} 行）`
+      : `已创建 ${validation.resolved}（${lines} 行）`;
   },
 };
 

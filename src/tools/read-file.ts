@@ -49,16 +49,16 @@ export const readFileTool: Tool = {
     const limit = Math.max(0, Math.min(Number(args.limit) || 2000, lines.length - offset));
 
     if (limit === 0) {
-      return `[File has ${lines.length} lines, offset ${offset} is at or past end]`;
+      return `[文件共 ${lines.length} 行，偏移量 ${offset} 超出范围]`;
     }
 
     const selectedLines = lines.slice(offset, offset + limit);
     const numbered = selectedLines.map((line, i) => `${offset + i + 1}\t${line}`).join('\n');
 
     const totalLines = lines.length;
-    const header = `[Lines ${offset + 1}-${Math.min(offset + limit, totalLines)} of ${totalLines}]`;
+    const header = `[第 ${offset + 1}-${Math.min(offset + limit, totalLines)} 行，共 ${totalLines} 行]`;
     const suffix = offset + limit < totalLines
-      ? `\n... (${totalLines - offset - limit} more lines, use offset to read more)`
+      ? `\n... （还有 ${totalLines - offset - limit} 行，使用 offset 继续读取）`
       : '';
 
     return `${header}\n${numbered}${suffix}`;

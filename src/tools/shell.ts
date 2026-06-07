@@ -47,7 +47,7 @@ export const shellTool: Tool = {
         stdout += data.toString();
         if (stdout.length > 100_000) {
           proc.kill();
-          stdout += '\n... (output truncated at 100KB)';
+          stdout += '\n... (输出在 100KB 处截断)';
         }
       });
 
@@ -55,7 +55,7 @@ export const shellTool: Tool = {
         stderr += data.toString();
         if (stderr.length > 50_000) {
           proc.kill();
-          stderr += '\n... (stderr truncated at 50KB)';
+          stderr += '\n... (错误输出在 50KB 处截断)';
         }
       });
 
@@ -63,7 +63,7 @@ export const shellTool: Tool = {
         if (settled) return;
         settled = true;
         proc.kill();
-        reject(new Error(`Command timed out after ${timeout}ms`));
+        reject(new Error(`命令执行超时（${timeout}ms）`));
       }, timeout);
 
       proc.on('close', (code) => {
@@ -72,8 +72,8 @@ export const shellTool: Tool = {
         clearTimeout(timer);
         const parts: string[] = [];
         if (stdout) parts.push(stdout.trimEnd());
-        if (stderr) parts.push(`[STDERR]\n${stderr.trimEnd()}`);
-        parts.push(`[Exit code: ${code}]`);
+        if (stderr) parts.push(`[错误输出]\n${stderr.trimEnd()}`);
+        parts.push(`[退出码: ${code}]`);
         resolve(parts.join('\n'));
       });
 
@@ -81,7 +81,7 @@ export const shellTool: Tool = {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        reject(new Error(`Failed to execute command: ${err.message}`));
+        reject(new Error(`命令执行失败：${err.message}`));
       });
     });
   },

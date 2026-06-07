@@ -103,7 +103,7 @@ describe('ToolRegistry', () => {
 
     it('returns error for unknown tool', async () => {
       const result = await registry.execute('unknown', {}, mockCtx);
-      expect(result.error).toBe('Unknown tool: unknown');
+      expect(result.error).toBe('未知工具: unknown');
       expect(result.output).toBe('');
     });
   });

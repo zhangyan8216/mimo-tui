@@ -55,7 +55,7 @@ export const editFileTool: Tool = {
 
     const oldLines = oldStr.split('\n').length;
     const newLines = newStr.split('\n').length;
-    return `Edited ${validation.resolved}: replaced ${oldLines} line(s) with ${newLines} line(s)`;
+    return `已编辑 ${validation.resolved}：替换 ${oldLines} 行为 ${newLines} 行`;
   },
 };
 

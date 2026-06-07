@@ -45,23 +45,23 @@ export const todoTool: Tool = {
     switch (action) {
       case 'add': {
         const content = String(args.content || '');
-        if (!content) throw new Error('Content is required for add action');
+        if (!content) throw new Error('添加任务时内容不能为空');
         const todo: TodoItem = { id: nextId++, content, status: 'pending' };
         todos.push(todo);
-        return `Added task #${todo.id}: ${content}`;
+        return `已添加任务 #${todo.id}: ${content}`;
       }
 
       case 'update': {
         const id = Number(args.id);
         const status = String(args.status) as TodoItem['status'];
         const todo = todos.find(t => t.id === id);
-        if (!todo) throw new Error(`Task #${id} not found`);
+        if (!todo) throw new Error(`任务 #${id} 未找到`);
         if (status) todo.status = status;
-        return `Updated task #${id}: ${todo.status}`;
+        return `已更新任务 #${id}: ${todo.status}`;
       }
 
       case 'list': {
-        if (todos.length === 0) return 'No tasks.';
+        if (todos.length === 0) return '暂无任务。';
         return todos.map(t => {
           const icon = t.status === 'completed' ? '✅' : t.status === 'in_progress' ? '🔄' : '⬜';
           return `${icon} #${t.id} [${t.status}] ${t.content}`;
@@ -72,11 +72,11 @@ export const todoTool: Tool = {
         const count = todos.length;
         todos = [];
         nextId = 1;
-        return `Cleared ${count} tasks.`;
+        return `已清空 ${count} 个任务。`;
       }
 
       default:
-        throw new Error(`Unknown action: ${action}`);
+        throw new Error(`未知操作: ${action}`);
     }
   },
 };

@@ -29,7 +29,7 @@ function runDockerCommand(command: string, cwd: string, timeout = 60_000): Promi
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
       if (stdout.length > MAX_OUTPUT) {
-        stdout = stdout.slice(0, MAX_OUTPUT) + '\n... (output truncated at 50KB)';
+        stdout = stdout.slice(0, MAX_OUTPUT) + '\n... (输出在 50KB 处截断)';
         proc.kill();
       }
     });
@@ -37,28 +37,28 @@ function runDockerCommand(command: string, cwd: string, timeout = 60_000): Promi
     proc.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
       if (stderr.length > MAX_OUTPUT) {
-        stderr = stderr.slice(0, MAX_OUTPUT) + '\n... (stderr truncated at 50KB)';
+        stderr = stderr.slice(0, MAX_OUTPUT) + '\n... (错误输出在 50KB 处截断)';
         proc.kill();
       }
     });
 
     const timer = setTimeout(() => {
       proc.kill();
-      reject(new Error(`Docker command timed out after ${timeout}ms`));
+      reject(new Error(`Docker 命令执行超时（${timeout}ms）`));
     }, timeout);
 
     proc.on('close', (code) => {
       clearTimeout(timer);
       const parts: string[] = [];
       if (stdout) parts.push(stdout.trimEnd());
-      if (stderr) parts.push(`[STDERR]\n${stderr.trimEnd()}`);
-      parts.push(`[Exit code: ${code}]`);
+      if (stderr) parts.push(`[错误输出]\n${stderr.trimEnd()}`);
+      parts.push(`[退出码: ${code}]`);
       resolve(parts.join('\n'));
     });
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      reject(new Error(`Failed to execute docker command: ${err.message}`));
+      reject(new Error(`Docker 命令执行失败：${err.message}`));
     });
   });
 }

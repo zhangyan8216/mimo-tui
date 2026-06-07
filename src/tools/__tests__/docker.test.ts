@@ -122,7 +122,7 @@ describe('docker tool', () => {
 
     const result = await promise;
     expect(result).toContain('CONTAINER ID');
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   it('builds ps command with extra args', async () => {
@@ -136,7 +136,7 @@ describe('docker tool', () => {
     });
 
     const result = await promise;
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
 
     // Verify the spawn call included the extra args
     const callArgs = mockSpawn.mock.calls[0];
@@ -156,7 +156,7 @@ describe('docker tool', () => {
 
     const result = await promise;
     expect(result).toContain('REPOSITORY');
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
   });
 
   it('passes stderr output through', async () => {
@@ -170,9 +170,9 @@ describe('docker tool', () => {
     });
 
     const result = await promise;
-    expect(result).toContain('[STDERR]');
+    expect(result).toContain('[错误输出]');
     expect(result).toContain('Cannot connect to Docker daemon');
-    expect(result).toContain('[Exit code: 1]');
+    expect(result).toContain('[退出码: 1]');
   });
 
   it('handles spawn error (docker not installed)', async () => {
@@ -203,7 +203,7 @@ describe('docker tool', () => {
     });
 
     const result = await promise;
-    expect(result).toContain('[Exit code: 0]');
+    expect(result).toContain('[退出码: 0]');
     const cmdString = mockSpawn.mock.calls[0][1].join(' ');
     expect(cmdString).toContain('docker run');
     expect(cmdString).toContain('nginx');

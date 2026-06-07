@@ -62,7 +62,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
           {streaming ? (
             <>
               <Text bold>{SPINNER[spinnerIdx]}</Text>
-              {' Thinking '}
+              {' 思考中 '}
               <Text dimColor>({duration})</Text>
             </>
           ) : (
