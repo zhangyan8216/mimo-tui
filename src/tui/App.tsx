@@ -532,7 +532,14 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           setUsage(newUsage);
         },
         requestApproval: async (toolName, args) => {
+          // 始终批准的工具
           if (alwaysApprovedTools.current.has(toolName)) {
+            return true;
+          }
+          // 会话级记忆：同一文件路径已批准过，自动通过
+          const filePath = String(args.path || args.file || '');
+          const approvalKey = filePath ? `${toolName}:${filePath}` : toolName;
+          if (alwaysApprovedTools.current.has(approvalKey)) {
             return true;
           }
           return new Promise<boolean>((resolve) => {
@@ -715,7 +722,14 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   // Handle approval
   const handleApproval = useCallback((always: boolean) => {
     if (approvalPending) {
-      if (always) alwaysApprovedTools.current.add(approvalPending.toolName);
+      if (always) {
+        alwaysApprovedTools.current.add(approvalPending.toolName);
+        // 也记住文件路径级别的批准
+        const filePath = String(approvalPending.args.path || approvalPending.args.file || '');
+        if (filePath) {
+          alwaysApprovedTools.current.add(`${approvalPending.toolName}:${filePath}`);
+        }
+      }
       approvalPending.resolve(true);
       setApprovalPending(null);
     }

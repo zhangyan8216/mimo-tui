@@ -68,15 +68,26 @@ export function isReadOnlyTool(toolName: string): boolean {
 export function needsApproval(mode: AgentMode, toolName: string): boolean {
   const config = MODES[mode];
 
-  if (toolName === 'read_file' || toolName === 'glob' || toolName === 'grep') {
-    return !config.autoApproveReads;
+  // 只读工具永远不需要审批
+  if (['read_file', 'glob', 'grep', 'todo', 'codebase'].includes(toolName)) {
+    return false;
   }
+
+  // 运维/分析工具不需要审批
+  if (['test_runner', 'coverage', 'benchmark', 'code_review', 'database'].includes(toolName)) {
+    return false;
+  }
+
+  // shell 需要审批（除非 yolo）
   if (toolName === 'shell') {
     return !config.autoApproveShell;
   }
-  if (toolName === 'write_file' || toolName === 'edit_file' || toolName === 'web_fetch') {
+
+  // 写文件工具
+  if (['write_file', 'edit_file', 'multi_edit', 'web_fetch', 'docker'].includes(toolName)) {
     return !config.autoApproveWrites;
   }
 
-  return true;
+  // 默认：agent 模式不审批，plan 模式不允许
+  return false;
 }
