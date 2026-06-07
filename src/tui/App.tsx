@@ -196,19 +196,25 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     systemPrompt.current = '你是 MiMo，一个运行在终端里的 AI 编程助手。用中文回答，简洁直接。';
   }, []);
 
-  // 构建项目上下文（文件树、依赖、配置等）
+  // 构建项目上下文（异步，不阻塞 UI）
   useEffect(() => {
-    try {
-      projectCtx.current = buildProjectContext(process.cwd());
-    } catch { /* ignore */ }
+    const timer = setTimeout(() => {
+      try {
+        projectCtx.current = buildProjectContext(process.cwd());
+      } catch { /* ignore */ }
+    }, 100); // 延迟 100ms，让 UI 先渲染
+    return () => clearTimeout(timer);
   }, []);
 
-  // 检测 Git 状态
+  // 检测 Git 状态（带超时）
   useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     getGitInfo().then(info => {
       setGitBranch(info.branch);
       setGitDirty(info.dirty);
     }).catch(() => {});
+    return () => { clearTimeout(timer); controller.abort(); };
   }, []);
 
   // Load skills
@@ -216,7 +222,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     skills.current = loadSkills(process.cwd());
   }, []);
 
-  // Connect MCP servers and register their tools
+  // Connect MCP servers（带超时，不阻塞启动）
   useEffect(() => {
     const servers = config.mcp.servers;
     if (servers.length === 0) return;
@@ -227,9 +233,14 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     (async () => {
       for (const serverCfg of servers) {
         try {
-          await mcp.connectServer(serverCfg);
+          // 单个 MCP 连接超时 5 秒
+          const connectPromise = mcp.connectServer(serverCfg);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('MCP 连接超时')), 5000)
+          );
+          await Promise.race([connectPromise, timeoutPromise]);
         } catch (e) {
-          process.stderr.write(`MCP server "${serverCfg.name}" failed: ${e}\n`);
+          process.stderr.write(`MCP "${serverCfg.name}" 跳过: ${e}\n`);
         }
       }
       // Register MCP tools as wrapper tools
@@ -475,7 +486,13 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
 
     try {
       const messagesBeforeLoop = messagesRef.current.length;
-      const result = await loop.run(modeRef.current, {
+      // 全局超时保护: 5 分钟
+      const globalTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('请求超时（5分钟）。请检查网络连接或简化任务。')), 300000)
+      );
+
+      const result = await Promise.race([
+        loop.run(modeRef.current, {
         onToken: (token) => {
           streamBufferRef.current.content += token;
           streamBufferRef.current.dirty = true;
@@ -552,7 +569,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             content: `❌ 错误: ${error.message}`,
           }]);
         },
-      }, apiMessages);
+      }, apiMessages),
+        globalTimeout,
+      ]);
 
       // 停止节流定时器，刷新剩余缓冲
       if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
