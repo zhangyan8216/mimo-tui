@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.2.0 (2025-06-08)
+
+### 🎨 UX/Interactivity Overhaul (20+ improvements)
+
+**Critical Fixes:**
+- `?` key no longer hijacks typing — help moved to `Ctrl+/`
+- Ctrl+C preserves streamed content (adds ⚠️ interrupted marker)
+- Approval dialog shows alongside chat, not replacing it
+- Approval accepts uppercase Y/A/N keys
+
+**Input Improvements:**
+- `Ctrl+W` word-delete, `Ctrl+←/→` word-level cursor movement
+- `←/→` arrow keys for character-level cursor movement
+- Updated hint bar: `Enter 发送 · Shift+Enter 换行 · ↑↓ 历史 · Ctrl+W 删词`
+
+**Scrollable Views:**
+- HelpOverlay: `↑↓`/`PgUp`/`PgDn` scrolling, compact layout, `Esc` to close
+- CommandPalette: scrollable with "↑/↓ 更多..." indicators
+- SessionPicker: scrollable with delete confirmation (Ctrl+D → Enter confirm)
+- SessionPicker: year included in date format
+
+**Display Improvements:**
+- Markdown: table rendering, heading differentiation (█/▓/▒), link URLs shown in parentheses
+- Markdown: code block background uses theme color instead of hardcoded hex
+- Approval dialog: Chinese tool labels, 80-character preview
+- StatusBar: context limit updated to 200K (was hardcoded 128K)
+- SubAgentPanel: 1-second re-render timer for live duration display
+- ThinkingBlock: clean elapsed time tracking (ms-based)
+- ChatView: version shows v1.2.0, help shortcut shows Ctrl+/
+
+**Bug Fixes:**
+- Tool result matching: prefer name-based match over sequential iteration
+
 ## v1.1.0 (2025-06-08)
 
 ### 🚀 New Features
