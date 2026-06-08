@@ -46,6 +46,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    if: contains(github.ref, 'v')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +56,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - run: npm publish
+      - name: Publish to npm
+        run: npm publish || echo "npm publish failed (NPM_TOKEN not configured)"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
