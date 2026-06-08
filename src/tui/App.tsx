@@ -47,6 +47,7 @@ import { buildSystemPrompt, extractRecentErrors } from '../utils/prompt-builder.
 import { PluginManager } from '../plugins/manager.js';
 import { globalHooks } from '../hooks/index.js';
 // Lazy-loaded heavy modules (type-only imports for type annotations)
+import esmRequire from '../utils/esm-require.js';
 import type { SnippetLibrary } from '../utils/snippets.js';
 import type { FileWatcher } from '../utils/watcher.js';
 import type { MCPClient } from '../mcp/client.js';
@@ -119,24 +120,24 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const commandHistory = useRef(new CommandHistory());
   const snippetLibrary = useRef<SnippetLibrary | null>(null);
   const getSnippetLibrary = useCallback((): SnippetLibrary => {
-    if (!snippetLibrary.current) snippetLibrary.current = new (require('../utils/snippets.js').SnippetLibrary)();
+    if (!snippetLibrary.current) snippetLibrary.current = new (esmRequire('../utils/snippets.js').SnippetLibrary)();
     return snippetLibrary.current!;
   }, []);
   const memoryStore = useRef(new MemoryStore());
   const fileWatcher = useRef<FileWatcher | null>(null);
   const getFileWatcher = useCallback((): FileWatcher => {
-    if (!fileWatcher.current) fileWatcher.current = new (require('../utils/watcher.js').FileWatcher)();
+    if (!fileWatcher.current) fileWatcher.current = new (esmRequire('../utils/watcher.js').FileWatcher)();
     return fileWatcher.current!;
   }, []);
   const mcpClient = useRef<MCPClient | null>(null);
   const getMcpClient = useCallback((): MCPClient => {
-    if (!mcpClient.current) mcpClient.current = new (require('../mcp/client.js').MCPClient)();
+    if (!mcpClient.current) mcpClient.current = new (esmRequire('../mcp/client.js').MCPClient)();
     return mcpClient.current!;
   }, []);
   const subAgentManager = useRef<SubAgentManager | null>(null);
   const getSubAgentManager = useCallback((): SubAgentManager => {
     if (!subAgentManager.current) {
-      const { SubAgentManager } = require('../agent/sub-agent.js');
+      const { SubAgentManager } = esmRequire('../agent/sub-agent.js');
       const cfg = configRef.current;
       subAgentManager.current = new SubAgentManager(
         cfg.agent.maxConcurrentAgents || 5,
@@ -149,7 +150,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const pluginManager = useRef<PluginManager | null>(null);
   const knowledgeBase = useRef<KnowledgeBase | null>(null);
   const getKnowledgeBase = useCallback((): KnowledgeBase => {
-    if (!knowledgeBase.current) knowledgeBase.current = new (require('../utils/knowledge-base.js').KnowledgeBase)();
+    if (!knowledgeBase.current) knowledgeBase.current = new (esmRequire('../utils/knowledge-base.js').KnowledgeBase)();
     return knowledgeBase.current!;
   }, []);
   const activeWorkflow = useRef<{ workflow: Workflow; stepIndex: number } | null>(null);

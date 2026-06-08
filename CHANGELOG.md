@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.3.2 (2026-06-08)
+
+### ESM Migration
+
+- Replaced all inline `require()` calls in commands with top-level ES module imports (`ai.ts`, `git.ts`, `session.ts`, `tools.ts`).
+- Added `src/utils/esm-require.ts` — a `createRequire` wrapper for dynamic lazy-loading in ESM context.
+- Lazy-loaded modules in `App.tsx` now use `esmRequire()` instead of inline `require()`.
+- Moved `typescript` from `devDependencies` to `dependencies` (required at runtime for `createRequire`).
+
 ## v1.3.1 (2026-06-08)
 
 ### Release hardening

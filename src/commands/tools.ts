@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { saveConfig, DEFAULT_CONFIG, getConfigDir, type Config } from '../config.js';
+import { saveConfig, removeMcpServer, DEFAULT_CONFIG, getConfigDir, type Config } from '../config.js';
 import { createProvider } from '../api/providers/index.js';
 import { compactContext } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -749,7 +749,6 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
       }
 
       if (type === 'mcp') {
-        const { removeMcpServer } = require('../config.js');
         const newConfig = removeMcpServer(configRef.current, name);
         setConfig(newConfig);
         setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${name}** 已从配置中移除。重启后生效。` }]);

@@ -1,6 +1,7 @@
 // src/commands/session.ts - Session management commands
 
 import { exportConversation } from '../utils/export.js';
+import { saveConfig } from '../config.js';
 import type { CommandContext } from './types.js';
 
 export function handleSessionCommand(cmd: string, cmdArgs: string[], ctx: CommandContext): void {
@@ -33,7 +34,6 @@ export function handleSessionCommand(cmd: string, cmdArgs: string[], ctx: Comman
         ctx.setMode(cmdArgs[0] as any);
         ctx.setConfig(prev => {
           const updated = { ...prev, agent: { ...prev.agent, mode: cmdArgs[0] as any } };
-          const { saveConfig } = require('../config.js');
           saveConfig(updated);
           return updated;
         });

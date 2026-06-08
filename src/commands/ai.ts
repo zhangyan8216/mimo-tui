@@ -1,5 +1,7 @@
 // src/commands/ai.ts - AI capability commands (workflow, parallel, pipeline, etc.)
 
+import fs from 'fs';
+import path from 'path';
 import { createProvider } from '../api/providers/index.js';
 import { BUILTIN_WORKFLOWS, searchWorkflows } from '../utils/workflow.js';
 import type { CommandContext } from './types.js';
@@ -23,8 +25,6 @@ interface UserWorkflowsConfig {
 
 function loadUserWorkflows(): import('../utils/workflow.js').Workflow[] {
   try {
-    const path = require('path');
-    const fs = require('fs');
     const workflowsPath = path.join(process.cwd(), '.mimo', 'workflows.json');
     if (fs.existsSync(workflowsPath)) {
       const content = fs.readFileSync(workflowsPath, 'utf-8');

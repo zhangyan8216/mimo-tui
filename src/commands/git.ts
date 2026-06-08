@@ -1,6 +1,7 @@
 // src/commands/git.ts - Git slash commands
 
 import { getGitInfo, getGitDiff, getRecentCommits } from '../utils/git.js';
+import { execSync } from 'child_process';
 import type { CommandContext } from './types.js';
 
 /** Validate git ref (branch, tag, commit) — prevents shell injection */
@@ -98,12 +99,10 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       setMessages(prev => [...prev, { role: 'assistant', content: '🔍 正在分析分支差异...' }]);
       Promise.all([
         new Promise<string>((resolve) => {
-          const { execSync: execSyncPr } = require('child_process');
-          try { resolve(execSyncPr('git diff main...HEAD --stat', { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
+          try { resolve(execSync('git diff main...HEAD --stat', { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
         }),
         new Promise<string>((resolve) => {
-          const { execSync: execSyncDiff } = require('child_process');
-          try { resolve(execSyncDiff('git diff main...HEAD', { encoding: 'utf-8', timeout: 15000 }).slice(0, 6000)); } catch { resolve(''); }
+          try { resolve(execSync('git diff main...HEAD', { encoding: 'utf-8', timeout: 15000 }).slice(0, 6000)); } catch { resolve(''); }
         }),
       ]).then(([stat, diff]) => {
         if (!stat && !diff) {
@@ -143,8 +142,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       if (!isValidGitRef(compareBranch)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的分支名' }]); return; }
       setMessages(prev => [...prev, { role: 'assistant', content: `🔀 正在与 ${compareBranch} 分支对比...` }]);
       new Promise<string>((resolve) => {
-        const { execSync: execSyncCmp } = require('child_process');
-        try { resolve(execSyncCmp(`git diff ${compareBranch}...HEAD --stat`, { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
+        try { resolve(execSync(`git diff ${compareBranch}...HEAD --stat`, { encoding: 'utf-8', timeout: 10000 })); } catch { resolve(''); }
       }).then(stat => {
         if (!stat || stat.trim() === '') {
           setMessages(prev => [...prev, { role: 'assistant', content: `✅ 当前分支与 ${compareBranch} 没有差异` }]);
@@ -302,18 +300,16 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     setMessages(prev => [...prev, { role: 'assistant', content: '📊 正在统计 Git 数据...' }]);
     Promise.all([
       new Promise<string>((resolve) => {
-        const { execSync: execSyncStats } = require('child_process');
         try {
-          resolve(execSyncStats(
+          resolve(execSync(
             'git log --shortstat --since="1 month ago" | grep "files changed" | awk \'{files+=$1; ins+=$4; del+=$6} END {print "月度统计: 修改 "files" 文件, 新增 "ins" 行, 删除 "del" 行"}\'',
             { encoding: 'utf-8', timeout: 15000, shell: 'bash' }
           ).trim());
         } catch { resolve(''); }
       }),
       new Promise<string>((resolve) => {
-        const { execSync: execSyncAuthors } = require('child_process');
         try {
-          resolve(execSyncAuthors(
+          resolve(execSync(
             'git shortlog -sn --since="1 month ago"',
             { encoding: 'utf-8', timeout: 10000 }
           ).trim());
