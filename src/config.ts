@@ -24,6 +24,9 @@ export interface Config {
     autoApproveReads: boolean;
     thinkingEnabled: boolean;
     reasoningEffort: 'low' | 'medium' | 'high' | 'auto';
+    maxConcurrentAgents: number;
+    agentTimeout: number;
+    enableNestedAgents: boolean;
   };
   ui: {
     theme: string;
@@ -50,6 +53,9 @@ export const DEFAULT_CONFIG: Config = {
     autoApproveReads: true,
     thinkingEnabled: true,
     reasoningEffort: 'medium',
+    maxConcurrentAgents: 5,
+    agentTimeout: 120000,
+    enableNestedAgents: true,
   },
   ui: {
     theme: 'default',
@@ -64,7 +70,13 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 export function loadConfig(): Config {
-  const config = { ...DEFAULT_CONFIG };
+  // Deep copy to avoid mutating DEFAULT_CONFIG
+  const config: Config = {
+    provider: { ...DEFAULT_CONFIG.provider },
+    agent: { ...DEFAULT_CONFIG.agent },
+    ui: { ...DEFAULT_CONFIG.ui },
+    mcp: { servers: [...DEFAULT_CONFIG.mcp.servers] },
+  };
 
   // Load from config file
   if (fs.existsSync(CONFIG_FILE)) {
@@ -85,7 +97,7 @@ export function loadConfig(): Config {
         if (a.max_iterations) config.agent.maxIterations = Number(a.max_iterations);
         if (a.auto_approve_reads !== undefined) config.agent.autoApproveReads = Boolean(a.auto_approve_reads);
         if (a.thinking_enabled !== undefined) config.agent.thinkingEnabled = Boolean(a.thinking_enabled);
-        if (a.reasoning_effort) config.agent.reasoningEffort = a.reasoning_effort as 'low' | 'medium' | 'high';
+        if (a.reasoning_effort) config.agent.reasoningEffort = a.reasoning_effort as 'low' | 'medium' | 'high' | 'auto';
       }
       if (toml.ui) {
         const u = toml.ui as Record<string, unknown>;

@@ -17,9 +17,18 @@ export interface Memory {
 
 export class MemoryStore {
   private memories: Memory[] = [];
+  private saveQueued = false;
 
   constructor() {
     this.load();
+  }
+
+  /** 延迟保存 — 避免频繁磁盘写入 */
+  private scheduleSave(): void {
+    if (!this.saveQueued) {
+      this.saveQueued = true;
+      setTimeout(() => { this.saveQueued = false; this.save(); }, 1000);
+    }
   }
 
   /** 记住一条信息 */
@@ -46,7 +55,7 @@ export class MemoryStore {
     const mem = this.memories.find(m => m.key === key);
     if (mem) {
       mem.accessCount++;
-      this.save();
+      this.scheduleSave(); // 延迟保存，避免频繁磁盘 I/O
       return mem.value;
     }
     return null;
@@ -104,9 +113,10 @@ export class MemoryStore {
   private load(): void {
     try {
       if (fs.existsSync(MEMORY_FILE)) {
-        this.memories = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8'));
+        this.memories = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* ignore */ }
+    } catch { /* corrupted file — keep empty */ }
   }
 
   private save(): void {

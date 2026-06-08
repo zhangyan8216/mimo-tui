@@ -6,7 +6,7 @@ Terminal AI coding agent powered by Xiaomi MiMo. A full-screen TUI (Terminal Use
 
 - **Full-screen TUI** -- built with Ink (React for CLI), card-based message rendering
 - **Streaming responses** -- real-time output at 30fps, displays reasoning/thinking process
-- **16 built-in tools** -- read/write/edit files, shell commands, glob, grep, web fetch, todo, test runner, codebase analysis (6 actions), docker (8 actions), coverage, multi-edit, database (4 actions), code review (4 actions), benchmark (4 actions)
+- **17 built-in tools** -- read/write/edit files, shell commands, glob, grep, web fetch, todo, test runner, codebase analysis (6 actions), docker (8 actions), coverage, multi-edit, database (4 actions), code review (4 actions), benchmark (4 actions), multi-agent parallel execution (3 strategies)
 - **3 provider backends** -- Anthropic/MiMo (default), OpenAI/GPT, Google Gemini with auto-detection
 - **3 agent modes** -- Plan (read-only), Agent (interactive approval), YOLO (auto-approve)
 - **AI memory** -- persist user preferences across sessions, auto-injected into system prompt
@@ -42,7 +42,7 @@ Requires Node.js 18 or later.
 Alternatively, clone and build from source:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mimo-tui.git
+git clone https://github.com/xiaomi/mimo-tui.git
 cd mimo-tui
 npm install
 npm run build

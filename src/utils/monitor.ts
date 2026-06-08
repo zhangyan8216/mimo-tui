@@ -46,11 +46,13 @@ export class Monitor {
     }
     const summary: Record<string, { count: number; avg: number; min: number; max: number; unit: string }> = {};
     for (const [name, g] of Object.entries(groups)) {
+      if (g.values.length === 0) continue;
+      const sum = g.values.reduce((a, b) => a + b, 0);
       summary[name] = {
         count: g.values.length,
-        avg: Math.round(g.values.reduce((a, b) => a + b, 0) / g.values.length),
-        min: Math.min(...g.values),
-        max: Math.max(...g.values),
+        avg: Math.round(sum / g.values.length),
+        min: g.values.reduce((a, b) => Math.min(a, b), Infinity),
+        max: g.values.reduce((a, b) => Math.max(a, b), -Infinity),
         unit: g.unit,
       };
     }

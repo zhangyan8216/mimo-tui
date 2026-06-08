@@ -54,10 +54,11 @@ export class CommandHistory {
   private load(): void {
     try {
       if (fs.existsSync(HISTORY_FILE)) {
-        this.history = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+        this.history = Array.isArray(parsed) ? parsed : [];
         this.index = this.history.length;
       }
-    } catch { /* ignore */ }
+    } catch { /* corrupted file — keep empty */ }
   }
 
   private save(): void {

@@ -193,7 +193,7 @@ export function t(key: string, vars?: Record<string, string>): string {
   let text = translations[currentLocale]?.[key] || translations.zh[key] || key;
   if (vars) {
     for (const [k, v] of Object.entries(vars)) {
-      text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+      text = text.replace(new RegExp(`\\{${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}`, 'g'), v);
     }
   }
   return text;

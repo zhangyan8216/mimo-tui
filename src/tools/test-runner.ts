@@ -274,18 +274,19 @@ export const testRunnerTool: Tool = {
       command = detection.command;
     }
 
-    // Append pattern filter if provided
+    // Append pattern filter if provided — sanitize to prevent shell injection
     if (pattern) {
+      const safePattern = pattern.replace(/[^a-zA-Z0-9_.*\-\/\\ ]/g, '');
       if (detection.framework === 'jest' || detection.framework === 'npm test') {
-        command += ` --testPathPattern="${pattern}"`;
+        command += ` --testPathPattern="${safePattern}"`;
       } else if (detection.framework === 'vitest') {
-        command += ` ${pattern}`;
+        command += ` ${safePattern}`;
       } else if (detection.framework === 'mocha') {
-        command += ` --grep "${pattern}"`;
+        command += ` --grep "${safePattern}"`;
       } else if (detection.framework === 'pytest') {
-        command += ` -k "${pattern}"`;
+        command += ` -k "${safePattern}"`;
       } else {
-        command += ` ${pattern}`;
+        command += ` ${safePattern}`;
       }
     }
 
@@ -331,7 +332,7 @@ export const testRunnerTool: Tool = {
         clearTimeout(timer);
         const exitCode = code ?? 1;
 
-        const parsed = parseTestResults(stdout, stderr, exitCode, detection!.framework);
+        const parsed = parseTestResults(stdout, stderr, exitCode, detection?.framework ?? 'custom');
         const results: TestResults = {
           ...parsed,
           exitCode,

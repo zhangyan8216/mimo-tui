@@ -13,10 +13,10 @@ function makeCtx(): ToolContext {
     cwd: tmpDir,
     workingDirectory: tmpDir,
     sandbox: {
-      validatePath: vi.fn().mockReturnValue({
+      validatePath: vi.fn().mockImplementation((p: string) => ({
         allowed: true,
-        resolved: tmpDir,
-      }),
+        resolved: path.resolve(tmpDir, p),
+      })),
     },
   } as unknown as ToolContext;
 }

@@ -3,6 +3,22 @@
 import { getGitInfo, getGitDiff, getRecentCommits } from '../utils/git.js';
 import type { CommandContext } from './types.js';
 
+/** Validate git ref (branch, tag, commit) — prevents shell injection */
+function isValidGitRef(ref: string): boolean {
+  return /^[a-zA-Z0-9._\-\/\^~]+$/.test(ref) && ref.length <= 200;
+}
+
+/** Validate file path — prevents shell injection */
+function isValidFilePath(p: string): boolean {
+  // Allow typical file paths but block shell metacharacters
+  return /^[a-zA-Z0-9._\-\/\\:@\s]+$/.test(p) && p.length <= 500;
+}
+
+/** Escape text for safe use in shell double-quoted strings */
+function shellEscape(s: string): string {
+  return s.replace(/["\\$`!]/g, '\\$&');
+}
+
 export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandContext): void {
   const { setMessages, handleSubmit } = ctx;
 
@@ -33,7 +49,8 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       }
       const customMsg = cmdArgs.slice(0).join(' ');
       if (customMsg) {
-        handleSubmit(`请用 shell 执行: git add -A && git commit -m "${customMsg}"`);
+        const safeMsg = shellEscape(customMsg);
+        handleSubmit(`请用 shell 执行: git add -A && git commit -m "${safeMsg}"`);
       } else {
         handleSubmit(`请根据以下 git diff 生成一个简洁的中文 commit message（遵循 conventional commits 格式），然后执行 git add -A && git commit:\n\n\`\`\`\n${diff.slice(0, 3000)}\n\`\`\``);
       }
@@ -44,9 +61,11 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       handleSubmit('请用 shell 执行 git stash list 并展示所有 stash');
     } else if (stashSub === 'apply') {
       const n = cmdArgs[1] || '0';
+      if (!/^\d+$/.test(n)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ Stash 索引必须是数字' }]); return; }
       handleSubmit(`请用 shell 执行 git stash apply stash@{${n}} 并报告结果`);
     } else if (stashSub === 'drop') {
       const n = cmdArgs[1] || '0';
+      if (!/^\d+$/.test(n)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ Stash 索引必须是数字' }]); return; }
       handleSubmit(`请用 shell 执行 git stash drop stash@{${n}} 并报告结果`);
     }
   } else if (sub === 'stash') {
@@ -63,6 +82,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       if (!prNumber) {
         handleSubmit('请用 shell 执行 gh pr view 并展示当前 PR 详情');
       } else {
+        if (!/^\d+$/.test(prNumber)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ PR 编号必须是数字' }]); return; }
         handleSubmit(`请用 shell 执行 gh pr view ${prNumber} 并展示结果`);
       }
     } else if (prSub === 'merge') {
@@ -70,6 +90,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       if (!prNumber) {
         setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git pr merge [PR 编号]' }]);
       } else {
+        if (!/^\d+$/.test(prNumber)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ PR 编号必须是数字' }]); return; }
         setMessages(prev => [...prev, { role: 'assistant', content: `🔀 正在合并 PR #${prNumber} (squash)...` }]);
         handleSubmit(`请用 shell 执行 gh pr merge ${prNumber} --squash 并报告结果`);
       }
@@ -105,7 +126,8 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!blameFile) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git blame <文件路径>' }]);
     } else {
-      handleSubmit(`请用 shell 执行 git blame "${blameFile}" 并展示结果`);
+      if (!isValidFilePath(blameFile)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的文件路径' }]); return; }
+      handleSubmit(`请用 shell 执行 git blame "${shellEscape(blameFile)}" 并展示结果`);
     }
   } else if (sub === 'conflict') {
     handleSubmit(
@@ -118,6 +140,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!compareBranch) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git compare <分支名>' }]);
     } else {
+      if (!isValidGitRef(compareBranch)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的分支名' }]); return; }
       setMessages(prev => [...prev, { role: 'assistant', content: `🔀 正在与 ${compareBranch} 分支对比...` }]);
       new Promise<string>((resolve) => {
         const { execSync: execSyncCmp } = require('child_process');
@@ -141,6 +164,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!tagName) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git tag <标签名>  (如: v1.0.0)' }]);
     } else {
+      if (!isValidGitRef(tagName)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的标签名' }]); return; }
       handleSubmit(`请用 shell 依次执行以下命令：\n1. git tag ${tagName}\n2. git push origin ${tagName}\n\n然后报告结果`);
     }
   } else if (sub === 'clean') {
@@ -154,6 +178,9 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!goodCommit || !badCommit) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git bisect <good_commit> <bad_commit>' }]);
     } else {
+      if (!isValidGitRef(goodCommit) || !isValidGitRef(badCommit)) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的 commit 引用' }]); return;
+      }
       setMessages(prev => [...prev, { role: 'assistant', content: '🔍 正在启动 git bisect 自动排查...' }]);
       handleSubmit(
         '请用 shell 工具执行 git bisect 流程: ' +
@@ -168,6 +195,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!commit) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git cherry-pick <commit>' }]);
     } else {
+      if (!isValidGitRef(commit)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的 commit 引用' }]); return; }
       handleSubmit('请用 shell 执行 git cherry-pick ' + commit + '，如果有冲突则帮助解决。用中文回复。');
     }
   } else if (sub === 'rebase') {
@@ -175,6 +203,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!rebaseBranch) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git rebase <branch>' }]);
     } else {
+      if (!isValidGitRef(rebaseBranch)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的分支名' }]); return; }
       handleSubmit('请用 shell 执行 git rebase ' + rebaseBranch + '，如果有冲突则帮助解决。用中文回复。');
     }
   } else if (sub === 'hook') {
@@ -207,6 +236,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       if (!branch) {
         setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git worktree add <branch>' }]);
       } else {
+        if (!isValidGitRef(branch)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的分支名' }]); return; }
         setMessages(prev => [...prev, { role: 'assistant', content: `🌳 正在创建工作树: ${branch}...` }]);
         handleSubmit(`请用 shell 执行 git worktree add .worktrees/${branch} ${branch}，然后报告结果。用中文回复。`);
       }
@@ -215,6 +245,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
       if (!wtName) {
         setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git worktree remove <name>' }]);
       } else {
+        if (!isValidGitRef(wtName)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的工作树名' }]); return; }
         handleSubmit(`请用 shell 执行 git worktree remove .worktrees/${wtName}，然后报告结果。用中文回复。`);
       }
     } else {
@@ -228,7 +259,8 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!query) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git search <搜索词>' }]);
     } else {
-      handleSubmit(`请用 shell 执行 git log --all --oneline --grep="${query}" -20 并展示结果`);
+      const safeQuery = shellEscape(query);
+      handleSubmit(`请用 shell 执行 git log --all --oneline --grep="${safeQuery}" -20 并展示结果`);
     }
   } else if (sub === 'recent') {
     handleSubmit('请用 shell 执行 git log --diff-filter=M --name-only --pretty=format: -10 | sort -u 并展示最近修改的文件');
@@ -239,6 +271,7 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!version) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git release <version>  (如: v1.0.0)' }]);
     } else {
+      if (!isValidGitRef(version)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的版本号' }]); return; }
       setMessages(prev => [...prev, { role: 'assistant', content: `🏷️ 正在创建发布版本: ${version}...` }]);
       handleSubmit(
         `请执行: 1) git log --oneline (最近的 commits) 2) 根据 commits 生成 CHANGELOG 3) git tag ${version} 4) git push origin ${version}`
@@ -252,8 +285,9 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!issueTitle) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git issue <标题>' }]);
     } else {
+      const safeTitle = shellEscape(issueTitle);
       setMessages(prev => [...prev, { role: 'assistant', content: `📝 正在创建 GitHub Issue: ${issueTitle}...` }]);
-      handleSubmit(`请用 shell 执行: gh issue create --title '${issueTitle}' --body '(由 MiMo TUI 自动创建)'`);
+      handleSubmit(`请用 shell 执行: gh issue create --title "${safeTitle}" --body '(由 MiMo TUI 自动创建)'`);
     }
   } else if (sub === 'ci') {
     const ciSub = cmdArgs[0];
@@ -310,7 +344,8 @@ export function handleGitCommand(sub: string, cmdArgs: string[], ctx: CommandCon
     if (!timelineFile) {
       setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: /git timeline <文件路径>' }]);
     } else {
-      handleSubmit(`请用 shell 执行 git log --oneline --follow -20 -- "${timelineFile}" 并展示结果`);
+      if (!isValidFilePath(timelineFile)) { setMessages(prev => [...prev, { role: 'assistant', content: '❌ 无效的文件路径' }]); return; }
+      handleSubmit(`请用 shell 执行 git log --oneline --follow -20 -- "${shellEscape(timelineFile)}" 并展示结果`);
     }
   } else {
     setMessages(prev => [...prev, {

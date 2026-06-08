@@ -315,14 +315,15 @@ export const coverageTool: Tool = {
 
     let command = detection.coverageCommand;
 
-    // Add pattern filter if provided
+    // Add pattern filter if provided — sanitize to prevent shell injection
     if (pattern) {
+      const safePattern = pattern.replace(/[^a-zA-Z0-9_.*\-\/\\ ]/g, '');
       if (detection.framework === 'jest') {
-        command += ` --testPathPattern="${pattern}"`;
+        command += ` --testPathPattern="${safePattern}"`;
       } else if (detection.framework === 'vitest') {
-        command += ` ${pattern}`;
+        command += ` ${safePattern}`;
       } else if (detection.framework === 'pytest') {
-        command += ` -k "${pattern}"`;
+        command += ` -k "${safePattern}"`;
       }
     }
 

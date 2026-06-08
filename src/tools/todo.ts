@@ -53,10 +53,16 @@ export const todoTool: Tool = {
 
       case 'update': {
         const id = Number(args.id);
-        const status = String(args.status) as TodoItem['status'];
         const todo = todos.find(t => t.id === id);
         if (!todo) throw new Error(`任务 #${id} 未找到`);
-        if (status) todo.status = status;
+        if (args.status != null) {
+          const status = String(args.status) as TodoItem['status'];
+          const validStatuses: TodoItem['status'][] = ['pending', 'in_progress', 'completed'];
+          if (!validStatuses.includes(status)) {
+            throw new Error(`无效状态 "${status}"。有效值: ${validStatuses.join(', ')}`);
+          }
+          todo.status = status;
+        }
         return `已更新任务 #${id}: ${todo.status}`;
       }
 

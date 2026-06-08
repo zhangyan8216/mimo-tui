@@ -118,7 +118,7 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
 
   while (remaining.length > 0) {
     // Inline code `...`
-    const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)$/s);
+    const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)$/);
     if (codeMatch) {
       if (codeMatch[1]) parts.push(<Text key={keyIdx++}>{codeMatch[1]}</Text>);
       parts.push(
@@ -131,7 +131,7 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
     }
 
     // Bold **...**
-    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)$/s);
+    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)$/);
     if (boldMatch) {
       if (boldMatch[1]) parts.push(<Text key={keyIdx++}>{boldMatch[1]}</Text>);
       parts.push(<Text key={keyIdx++} bold>{boldMatch[2]}</Text>);
@@ -140,7 +140,7 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
     }
 
     // Strikethrough ~~...~~
-    const strikeMatch = remaining.match(/^(.*?)~~(.+?)~~(.*)$/s);
+    const strikeMatch = remaining.match(/^(.*?)~~(.+?)~~(.*)$/);
     if (strikeMatch) {
       if (strikeMatch[1]) parts.push(<Text key={keyIdx++}>{strikeMatch[1]}</Text>);
       parts.push(<Text key={keyIdx++} strikethrough>{strikeMatch[2]}</Text>);
@@ -149,7 +149,7 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
     }
 
     // Italic *...*
-    const italicMatch = remaining.match(/^(.*?)\*(.+?)\*(.*)$/s);
+    const italicMatch = remaining.match(/^(.*?)\*(.+?)\*(.*)$/);
     if (italicMatch) {
       if (italicMatch[1]) parts.push(<Text key={keyIdx++}>{italicMatch[1]}</Text>);
       parts.push(<Text key={keyIdx++} italic>{italicMatch[2]}</Text>);
@@ -158,7 +158,7 @@ function renderInline(text: string, theme: Theme): React.ReactNode[] {
     }
 
     // Link [text](url)
-    const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)(.*)$/s);
+    const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)(.*)$/);
     if (linkMatch) {
       if (linkMatch[1]) parts.push(<Text key={keyIdx++}>{linkMatch[1]}</Text>);
       parts.push(

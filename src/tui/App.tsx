@@ -27,6 +27,8 @@ import { coverageTool } from '../tools/coverage.js';
 import { databaseTool } from '../tools/database.js';
 import { codeReviewTool } from '../tools/code-review.js';
 import { benchmarkTool } from '../tools/benchmark.js';
+import { multiAgentTool } from '../tools/multi-agent.js';
+import { SubAgentPanel } from './SubAgentPanel.js';
 import { AgentLoop } from '../agent/loop.js';
 import { compactContext, needsCompaction } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -101,6 +103,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const [streamingToolCalls, setStreamingToolCalls] = useState<Map<number, { name: string; args: string }>>(new Map());
   const [iteration, setIteration] = useState(0);
   const [gitBranch, setGitBranch] = useState<string>('');
+  const gitBranchRef = useRef(gitBranch);
   const [gitDirty, setGitDirty] = useState(false);
 
   // Refs
@@ -130,7 +133,15 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   }, []);
   const subAgentManager = useRef<SubAgentManager | null>(null);
   const getSubAgentManager = useCallback((): SubAgentManager => {
-    if (!subAgentManager.current) subAgentManager.current = new (require('../agent/sub-agent.js').SubAgentManager)(3);
+    if (!subAgentManager.current) {
+      const { SubAgentManager } = require('../agent/sub-agent.js');
+      const cfg = configRef.current;
+      subAgentManager.current = new SubAgentManager(
+        cfg.agent.maxConcurrentAgents || 5,
+        cfg.agent.agentTimeout || 120000,
+        cfg.agent.enableNestedAgents ? 2 : 0,
+      );
+    }
     return subAgentManager.current!;
   }, []);
   const pluginManager = useRef<PluginManager | null>(null);
@@ -145,8 +156,12 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
   const autoTest = useRef(false);
   const [fileChanges, setFileChanges] = useState<string>('');
 
+  // Ensure subAgentManager is initialized early (needed by multi_agent tool)
+  useEffect(() => { getSubAgentManager(); }, []);
+
   // Keep refs in sync
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { gitBranchRef.current = gitBranch; }, [gitBranch]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { configRef.current = config; }, [config]);
 
@@ -169,6 +184,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     registry.register(databaseTool);
     registry.register(codeReviewTool);
     registry.register(benchmarkTool);
+    registry.register(multiAgentTool);
     return registry;
   })());
 
@@ -403,7 +419,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       `- 语言: ${projectInfo.language}`,
       projectInfo.framework ? `- 框架: ${projectInfo.framework}` : '',
       `- 工作目录: ${process.cwd()}`,
-      gitBranch ? `- Git 分支: ${gitBranch}` : '',
+      gitBranchRef.current ? `- Git 分支: ${gitBranchRef.current}` : '',
     ].filter(Boolean).join('\n');
 
     // 智能上下文注入：文件树 + package.json + 相关文件
@@ -456,10 +472,13 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     // Create client and agent loop
     const cfg = configRef.current;
     const client = createProvider(cfg.provider.providerType, cfg.provider.apiKey, cfg.provider.baseUrl, cfg.provider.model);
-    const toolCtx: ToolContext = {
+    const toolCtx: ToolContext & { subAgentManager?: SubAgentManager; provider?: typeof client; mode?: AgentMode } = {
       sandbox: sandbox.current,
       cwd: process.cwd(),
       workingDirectory: process.cwd(),
+      subAgentManager: subAgentManager.current || undefined,
+      provider: client,
+      mode: modeRef.current,
     };
 
     const loop = new AgentLoop(client, toolRegistry.current, toolCtx, cfg.agent.maxIterations, cfg.agent.reasoningEffort);
@@ -484,12 +503,13 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       }
     }, 33);
 
+    let globalTimeoutId: ReturnType<typeof setTimeout> = undefined as any;
     try {
       const messagesBeforeLoop = messagesRef.current.length;
       // 全局超时保护: 5 分钟
-      const globalTimeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('请求超时（5分钟）。请检查网络连接或简化任务。')), 300000)
-      );
+      const globalTimeout = new Promise<never>((_, reject) => {
+        globalTimeoutId = setTimeout(() => reject(new Error('请求超时（5分钟）。请检查网络连接或简化任务。')), 300000);
+      });
 
       const result = await Promise.race([
         loop.run(modeRef.current, {
@@ -573,6 +593,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         globalTimeout,
       ]);
 
+      // 清理全局超时定时器，避免未处理的 reject
+      clearTimeout(globalTimeoutId);
+
       // 停止节流定时器，刷新剩余缓冲
       if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
       setStreamingContent(streamBufferRef.current.content);
@@ -595,7 +618,9 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       if (autoCommit.current && !isAutoCommitting.current) {
         isAutoCommitting.current = true;
         setTimeout(() => {
-          handleSubmit('请用 shell 执行: git add -A && git commit -m "auto: ' + processedText.slice(0, 50).replace(/"/g, '\\"') + '"');
+          // Only keep safe characters to prevent shell injection
+          const safeText = processedText.slice(0, 50).replace(/[^a-zA-Z0-9一-鿿 .,\-_]/g, '');
+          handleSubmit('请用 shell 执行: git add -A && git commit -m "auto: ' + safeText + '"');
           setTimeout(() => { isAutoCommitting.current = false; }, 2000);
         }, 500);
       }
@@ -643,6 +668,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         }
       }
     } catch (error) {
+      clearTimeout(globalTimeoutId);
       if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
       if (!agentLoop.current) return; // Was aborted, don't update state
       setIsStreaming(false);
@@ -850,6 +876,10 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
             isStreaming={isStreaming}
             isThinking={isThinking}
             toolResults={toolResults}
+          />
+          <SubAgentPanel
+            tasks={subAgentManager.current?.getAllTasks() || []}
+            theme={theme}
           />
           <InputArea
             theme={theme}

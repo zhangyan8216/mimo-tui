@@ -43,12 +43,20 @@ export const grepTool: Tool = {
     const caseInsensitive = Boolean(args.case_insensitive);
     const maxResults = Number(args.max_results) || 50;
 
+    // Sandbox validation for search path
+    const resolvedSearchPath = path.resolve(ctx.cwd, searchPath);
+    const validation = ctx.sandbox.validatePath(resolvedSearchPath);
+    if (!validation.allowed) {
+      throw new Error(`Access denied: ${validation.reason}`);
+    }
+    const safePath = validation.resolved;
+
     // Try ripgrep first
     try {
-      return await ripgrepSearch(pattern, searchPath, fileGlob, caseInsensitive, maxResults);
+      return await ripgrepSearch(pattern, safePath, fileGlob, caseInsensitive, maxResults);
     } catch {
       // Fallback to built-in search
-      return builtinSearch(pattern, searchPath, fileGlob, caseInsensitive, maxResults);
+      return builtinSearch(pattern, safePath, fileGlob, caseInsensitive, maxResults);
     }
   },
 };

@@ -48,6 +48,16 @@ export function exportConversation(messages: Message[], filePath?: string): stri
         lines.push(msg.content);
       }
       lines.push('');
+    } else if (msg.role === 'tool') {
+      lines.push('## 🔧 工具结果');
+      lines.push('');
+      if (msg.name) lines.push(`工具: \`${msg.name}\``);
+      if (msg.tool_call_id) lines.push(`ID: \`${msg.tool_call_id}\``);
+      lines.push('');
+      lines.push('```');
+      lines.push(msg.content || '(无输出)');
+      lines.push('```');
+      lines.push('');
     }
   }
 

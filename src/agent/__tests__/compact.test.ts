@@ -106,7 +106,7 @@ describe('compactContext', () => {
 
     // Should have 1 summary message + 8 recent messages = 9
     expect(result.compacted.length).toBe(9);
-    expect(result.compacted[0].content).toContain('**对话摘要**');
+    expect(result.compacted[0].content).toContain('对话摘要');
     expect(result.compacted[0].content).toContain(summary);
     // Last 8 messages preserved
     expect(result.compacted[1]).toEqual(msgs[4]);

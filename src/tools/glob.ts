@@ -31,8 +31,16 @@ export const globTool: Tool = {
     const searchPath = args.path ? String(args.path) : ctx.cwd;
     const limit = Number(args.limit) || 100;
 
+    // Sandbox validation for search path
+    const resolvedSearchPath = path.resolve(ctx.cwd, searchPath);
+    const validation = ctx.sandbox.validatePath(resolvedSearchPath);
+    if (!validation.allowed) {
+      throw new Error(`Access denied: ${validation.reason}`);
+    }
+    const safePath = validation.resolved;
+
     const files = await glob(pattern, {
-      cwd: searchPath,
+      cwd: safePath,
       absolute: false,
       nodir: true,
       ignore: ['**/node_modules/**', '**/.git/**', '**/dist/**'],

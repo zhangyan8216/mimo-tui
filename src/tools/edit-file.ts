@@ -38,6 +38,8 @@ export const editFileTool: Tool = {
     }
 
     const content = fs.readFileSync(validation.resolved, 'utf-8');
+    if (args.old_string == null) throw new Error('old_string 参数缺失');
+    if (args.new_string == null) throw new Error('new_string 参数缺失');
     const oldStr = String(args.old_string);
     const newStr = String(args.new_string);
 

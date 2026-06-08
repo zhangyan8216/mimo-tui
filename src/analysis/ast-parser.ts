@@ -149,31 +149,33 @@ export class AstParser {
         }
         // Extract imports
         else if (ts.isImportDeclaration(node)) {
-          const source = (node.moduleSpecifier as ts.StringLiteral).text;
-          const info: ImportInfo = {
-            source,
-            names: [],
-            isDefault: false,
-            isNamespace: false,
-            line: this.getLineNumber(sourceFile, node.getStart()),
-          };
-          if (node.importClause) {
-            if (node.importClause.name) {
-              info.names.push(node.importClause.name.text);
-              info.isDefault = true;
-            }
-            if (node.importClause.namedBindings) {
-              if (ts.isNamespaceImport(node.importClause.namedBindings)) {
-                info.names.push(node.importClause.namedBindings.name.text);
-                info.isNamespace = true;
-              } else if (ts.isNamedImports(node.importClause.namedBindings)) {
-                for (const element of node.importClause.namedBindings.elements) {
-                  info.names.push(element.name.text);
+          if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+            const source = node.moduleSpecifier.text;
+            const info: ImportInfo = {
+              source,
+              names: [],
+              isDefault: false,
+              isNamespace: false,
+              line: this.getLineNumber(sourceFile, node.getStart()),
+            };
+            if (node.importClause) {
+              if (node.importClause.name) {
+                info.names.push(node.importClause.name.text);
+                info.isDefault = true;
+              }
+              if (node.importClause.namedBindings) {
+                if (ts.isNamespaceImport(node.importClause.namedBindings)) {
+                  info.names.push(node.importClause.namedBindings.name.text);
+                  info.isNamespace = true;
+                } else if (ts.isNamedImports(node.importClause.namedBindings)) {
+                  for (const element of node.importClause.namedBindings.elements) {
+                    info.names.push(element.name.text);
+                  }
                 }
               }
             }
+            imports.push(info);
           }
-          imports.push(info);
         }
         // Extract export default
         else if (ts.isExportAssignment(node)) {

@@ -53,7 +53,9 @@ export function buildProjectContext(cwd: string): ProjectContext {
 
   // 异步获取 git 变更文件
   try {
-    const output = execSync('git diff --name-only HEAD 2>nul || git status --short 2>nul', {
+    const isWin = process.platform === 'win32';
+    const nullRedirect = isWin ? '2>nul' : '2>/dev/null';
+    const output = execSync(`git diff --name-only HEAD ${nullRedirect} || git status --short ${nullRedirect}`, {
       cwd, encoding: 'utf-8', timeout: 5000,
     });
     ctx.changedFiles = output.trim().split('\n').filter(Boolean).slice(0, 20);
@@ -321,7 +323,8 @@ function findSymbolDefinitionRegex(symbol: string, cwd: string): string | null {
         try {
           const content = fs.readFileSync(filePath, 'utf-8');
           // 查找 export class/interface/function/type + symbol
-          const regex = new RegExp(`(?:export\\s+)?(?:class|interface|function|type|const|enum)\\s+${symbol}\\b`);
+          const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(?:export\\s+)?(?:class|interface|function|type|const|enum)\\s+${escapedSymbol}\\b`);
           const match = content.match(regex);
           if (match) {
             const lineNum = content.substring(0, match.index).split('\n').length;

@@ -21,7 +21,7 @@ export function estimateTokens(messages: Message[]): number {
     if (msg.content) totalChars += msg.content.length;
     if (msg.tool_calls) {
       for (const tc of msg.tool_calls) {
-        totalChars += tc.function.name.length + tc.function.arguments.length + 20; // 工具调用结构开销
+        totalChars += tc.function.name.length + tc.function.arguments.length + 20;
       }
     }
   }
@@ -33,7 +33,13 @@ export function estimateTokens(messages: Message[]): number {
  * 检查是否需要压缩
  */
 export function needsCompaction(messages: Message[]): boolean {
-  const totalChars = messages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+  const totalChars = messages.reduce((sum, m) => {
+    let chars = m.content?.length || 0;
+    if (m.tool_calls) {
+      chars += m.tool_calls.reduce((s, tc) => s + tc.function.name.length + tc.function.arguments.length + 20, 0);
+    }
+    return sum + chars;
+  }, 0);
   return totalChars > COMPACT_THRESHOLD;
 }
 
@@ -131,7 +137,7 @@ export async function compactContext(
     log('info', `上下文压缩完成，节省约 ${savedTokens} tokens`);
 
     const compacted: Message[] = [
-      { role: 'assistant', content: `📋 **对话摘要** (已压缩 ${oldMessages.length} 条消息)\n\n${summary}` },
+      { role: 'user', content: `[系统] 以下是之前 ${oldMessages.length} 条消息的对话摘要:\n\n${summary}` },
       ...recentMessages,
     ];
 

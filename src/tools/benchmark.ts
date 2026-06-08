@@ -44,24 +44,26 @@ export const benchmarkTool: Tool = {
       const testFile = path.join(ctx.cwd, '.mimo-benchmark-test');
       const content = 'x'.repeat(10000);
 
-      // Write test
-      const writeStart = Date.now();
-      for (let i = 0; i < iterations; i++) {
-        fs.writeFileSync(testFile, content);
-      }
-      const writeTime = (Date.now() - writeStart) / iterations;
-      results.push(`  写入 10KB: ${writeTime.toFixed(1)}ms/次 (${iterations} 次平均)`);
+      try {
+        // Write test
+        const writeStart = Date.now();
+        for (let i = 0; i < iterations; i++) {
+          fs.writeFileSync(testFile, content);
+        }
+        const writeTime = (Date.now() - writeStart) / iterations;
+        results.push(`  写入 10KB: ${writeTime.toFixed(1)}ms/次 (${iterations} 次平均)`);
 
-      // Read test
-      const readStart = Date.now();
-      for (let i = 0; i < iterations; i++) {
-        fs.readFileSync(testFile, 'utf-8');
+        // Read test
+        const readStart = Date.now();
+        for (let i = 0; i < iterations; i++) {
+          fs.readFileSync(testFile, 'utf-8');
+        }
+        const readTime = (Date.now() - readStart) / iterations;
+        results.push(`  读取 10KB: ${readTime.toFixed(1)}ms/次 (${iterations} 次平均)`);
+      } finally {
+        // Cleanup - always runs even if an error occurs
+        try { fs.unlinkSync(testFile); } catch { /* ignore */ }
       }
-      const readTime = (Date.now() - readStart) / iterations;
-      results.push(`  读取 10KB: ${readTime.toFixed(1)}ms/次 (${iterations} 次平均)`);
-
-      // Cleanup
-      try { fs.unlinkSync(testFile); } catch { /* ignore */ }
     }
 
     if (action === 'command' || action === 'all') {

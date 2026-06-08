@@ -24,6 +24,17 @@ export const webFetchTool: Tool = {
     const url = String(args.url);
     const maxLength = Number(args.max_length) || 10000;
 
+    // Validate URL protocol to prevent file:// and other non-HTTP schemes
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        throw new Error(`不支持的协议: ${parsed.protocol}。仅支持 http:// 和 https://`);
+      }
+    } catch (e) {
+      if (e instanceof TypeError) throw new Error(`无效的 URL: ${url}`);
+      throw e;
+    }
+
     try {
       const response = await fetch(url, {
         headers: {

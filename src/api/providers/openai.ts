@@ -9,6 +9,7 @@ export class OpenAIProvider implements ProviderAdapter {
   private baseUrl: string;
   private model: string;
   private abortController: AbortController | null = null;
+  private _aborted = false;
 
   constructor(apiKey: string, baseUrl: string = 'https://api.openai.com/v1', model: string = 'gpt-4o') {
     this.apiKey = apiKey;
@@ -54,7 +55,9 @@ export class OpenAIProvider implements ProviderAdapter {
   }
 
   async *streamChat(messages: Message[], tools?: ToolDefinition[], options?: ChatOptions): AsyncGenerator<StreamEvent> {
+    this.abortController?.abort(); // Abort any existing stream
     this.abortController = new AbortController();
+    this._aborted = false;
 
     const body: any = {
       model: options?.model || this.model,
@@ -165,6 +168,7 @@ export class OpenAIProvider implements ProviderAdapter {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify(body),
+      signal: this.abortController?.signal,
     });
 
     if (!response.ok) {
@@ -196,11 +200,14 @@ export class OpenAIProvider implements ProviderAdapter {
   }
 
   abort(): void {
-    this.abortController?.abort();
-    this.abortController = null;
+    this._aborted = true;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
   }
 
   get isAborted(): boolean {
-    return this.abortController?.signal.aborted ?? false;
+    return this._aborted;
   }
 }

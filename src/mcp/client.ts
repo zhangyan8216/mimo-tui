@@ -90,6 +90,9 @@ export class MCPClient {
         }
       });
 
+      // Drain stderr to prevent buffer fill-up blocking the process
+      proc.stderr?.on('data', () => {});
+
       proc.on('error', reject);
 
       // Initialize
@@ -120,18 +123,21 @@ export class MCPClient {
       const id = ++server.requestId;
       const request: MCPRequest = { jsonrpc: '2.0', id, method, params };
 
-      server.pending.set(id, { resolve, reject });
-
-      const data = JSON.stringify(request) + '\n';
-      server.process?.stdin?.write(data);
-
-      // Timeout
-      setTimeout(() => {
+      // Store timer so it can be cleared on response
+      const timer = setTimeout(() => {
         if (server.pending.has(id)) {
           server.pending.delete(id);
           reject(new Error(`MCP request timeout: ${method}`));
         }
       }, 30000);
+
+      server.pending.set(id, {
+        resolve: (v: unknown) => { clearTimeout(timer); resolve(v); },
+        reject: (r: unknown) => { clearTimeout(timer); reject(r); },
+      });
+
+      const data = JSON.stringify(request) + '\n';
+      server.process?.stdin?.write(data);
     });
   }
 

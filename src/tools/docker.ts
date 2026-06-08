@@ -25,12 +25,13 @@ function runDockerCommand(command: string, cwd: string, timeout = 60_000): Promi
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
       if (stdout.length > MAX_OUTPUT) {
         stdout = stdout.slice(0, MAX_OUTPUT) + '\n... (输出在 50KB 处截断)';
-        proc.kill();
+        if (!settled) proc.kill();
       }
     });
 
@@ -38,16 +39,20 @@ function runDockerCommand(command: string, cwd: string, timeout = 60_000): Promi
       stderr += data.toString();
       if (stderr.length > MAX_OUTPUT) {
         stderr = stderr.slice(0, MAX_OUTPUT) + '\n... (错误输出在 50KB 处截断)';
-        proc.kill();
+        if (!settled) proc.kill();
       }
     });
 
     const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       proc.kill();
       reject(new Error(`Docker 命令执行超时（${timeout}ms）`));
     }, timeout);
 
     proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       const parts: string[] = [];
       if (stdout) parts.push(stdout.trimEnd());
@@ -57,6 +62,8 @@ function runDockerCommand(command: string, cwd: string, timeout = 60_000): Promi
     });
 
     proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       reject(new Error(`Docker 命令执行失败：${err.message}`));
     });
@@ -95,7 +102,6 @@ export const dockerTool: Tool = {
     const target = args.target ? String(args.target) : '';
     const extraArgs = args.args ? String(args.args) : '';
     const execCommand = args.command ? String(args.command) : '';
-    const isWindows = os.platform() === 'win32';
 
     // Build the docker command based on action
     let command: string;

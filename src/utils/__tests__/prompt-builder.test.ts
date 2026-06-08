@@ -17,6 +17,9 @@ const defaultConfig: Config = {
     autoApproveReads: true,
     thinkingEnabled: false,
     reasoningEffort: 'medium',
+    maxConcurrentAgents: 5,
+    agentTimeout: 120000,
+    enableNestedAgents: true,
   },
   ui: {
     theme: 'dark',

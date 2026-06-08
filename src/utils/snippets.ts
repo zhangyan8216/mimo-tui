@@ -64,9 +64,10 @@ export class SnippetLibrary {
   private load(): void {
     try {
       if (fs.existsSync(SNIPPETS_FILE)) {
-        this.snippets = JSON.parse(fs.readFileSync(SNIPPETS_FILE, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(SNIPPETS_FILE, 'utf-8'));
+        this.snippets = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* ignore */ }
+    } catch { /* corrupted file — keep empty, next save will overwrite */ }
   }
 
   private save(): void {

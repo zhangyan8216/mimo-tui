@@ -32,8 +32,16 @@ export const SessionPicker: React.FC<SessionPickerProps> = ({
     if (key.escape) { onClose(); return; }
     if (key.upArrow) { setSelectedIdx(prev => Math.max(0, prev - 1)); return; }
     if (key.downArrow) { setSelectedIdx(prev => Math.min(filtered.length - 1, prev + 1)); return; }
-    if (key.return && filtered.length > 0) { onSelect(filtered[selectedIdx].id); return; }
-    if (key.ctrl && input === 'd' && filtered.length > 0 && onDelete) { onDelete(filtered[selectedIdx].id); return; }
+    if (key.return && filtered.length > 0) {
+      const idx = Math.min(selectedIdx, filtered.length - 1);
+      onSelect(filtered[idx].id);
+      return;
+    }
+    if (key.ctrl && input === 'd' && filtered.length > 0 && onDelete) {
+      const idx = Math.min(selectedIdx, filtered.length - 1);
+      onDelete(filtered[idx].id);
+      return;
+    }
     if (key.backspace) { setQuery(prev => prev.slice(0, -1)); setSelectedIdx(0); return; }
     if (input && !key.ctrl && !key.meta) { setQuery(prev => prev + input); setSelectedIdx(0); }
   });

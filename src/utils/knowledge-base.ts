@@ -80,9 +80,10 @@ export class KnowledgeBase {
     try {
       const kbFile = path.join(KB_DIR, 'entries.json');
       if (fs.existsSync(kbFile)) {
-        this.entries = JSON.parse(fs.readFileSync(kbFile, 'utf-8'));
+        const parsed = JSON.parse(fs.readFileSync(kbFile, 'utf-8'));
+        this.entries = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* ignore */ }
+    } catch { /* corrupted file — keep empty, next save will overwrite */ }
   }
 
   private save(): void {

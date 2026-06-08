@@ -147,16 +147,27 @@ export class SessionStore {
 
   listSessions(limit = 20): Session[] {
     const rows = this.db.prepare(
-      'SELECT id FROM sessions ORDER BY updated_at DESC LIMIT ?'
-    ).all(limit) as { id: string }[];
+      'SELECT id, name, model, mode, branch, parent_id, created_at, updated_at FROM sessions ORDER BY updated_at DESC LIMIT ?'
+    ).all(limit) as Array<{ id: string; name: string; model: string; mode: string; branch: string; parent_id?: string; created_at: string; updated_at: string }>;
 
-    return rows.map(r => this.getSession(r.id)!).filter(Boolean);
+    // Load messages separately for each session (lazy loading for list view)
+    return rows.map(r => {
+      const messages = this.getMessages(r.id);
+      return {
+        id: r.id, name: r.name, model: r.model, mode: r.mode as AgentMode,
+        branch: r.branch, parent_id: r.parent_id,
+        created_at: r.created_at, updated_at: r.updated_at,
+        messages,
+        token_usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 },
+      };
+    });
   }
 
   deleteSession(sessionId: string): void {
-    this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(sessionId);
-    this.db.prepare('DELETE FROM usage WHERE session_id = ?').run(sessionId);
-    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    // Use transaction for atomicity (cascade handles messages/usage)
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId);
+    })();
   }
 
   updateUsage(sessionId: string, usage: TokenUsage): void {
@@ -184,9 +195,11 @@ export class SessionStore {
 
     const forked = this.createSession(newName, original.model, original.mode, sessionId);
 
-    // Copy messages
+    // Copy messages with original timestamps preserved
     for (const msg of original.messages) {
-      this.addMessage(forked.id, msg);
+      this.db.prepare(
+        'INSERT INTO messages (session_id, role, content, tool_call_id, name, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(forked.id, msg.role, msg.content || '', msg.tool_call_id || null, msg.name || null, (msg as any).created_at || new Date().toISOString());
     }
 
     return this.getSession(forked.id);

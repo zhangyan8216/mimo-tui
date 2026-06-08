@@ -91,8 +91,8 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         </Box>
       )}
 
-      {/* Streaming content (always visible during streaming, last 3 lines) */}
-      {streaming && content && !collapsed && (
+      {/* Streaming peek - last 3 lines when collapsed during streaming */}
+      {streaming && content && collapsed && (
         <Box flexDirection="column" paddingLeft={2}>
           {lines.slice(-3).map((line, i) => (
             <Text key={i} dimColor color={theme.fg.meta}>

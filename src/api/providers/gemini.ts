@@ -9,6 +9,7 @@ export class GeminiProvider implements ProviderAdapter {
   private baseUrl: string;
   private model: string;
   private abortController: AbortController | null = null;
+  private _aborted = false;
 
   constructor(apiKey: string, baseUrl: string = 'https://generativelanguage.googleapis.com/v1beta', model: string = 'gemini-2.0-flash') {
     this.apiKey = apiKey;
@@ -123,7 +124,9 @@ export class GeminiProvider implements ProviderAdapter {
   }
 
   async *streamChat(messages: Message[], tools?: ToolDefinition[], options?: ChatOptions): AsyncGenerator<StreamEvent> {
+    this.abortController?.abort(); // Abort any existing stream
     this.abortController = new AbortController();
+    this._aborted = false;
 
     const body = this.buildRequest(messages, tools, options);
     const url = `${this.baseUrl}/models/${this.model}:streamGenerateContent?alt=sse&key=${this.apiKey}`;
@@ -231,6 +234,7 @@ export class GeminiProvider implements ProviderAdapter {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: this.abortController?.signal,
     });
 
     if (!response.ok) {
@@ -280,12 +284,15 @@ export class GeminiProvider implements ProviderAdapter {
   }
 
   abort(): void {
-    this.abortController?.abort();
-    this.abortController = null;
+    this._aborted = true;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
   }
 
   get isAborted(): boolean {
-    return this.abortController?.signal.aborted ?? false;
+    return this._aborted;
   }
 
   // Format Gemini error responses into readable strings

@@ -1,6 +1,6 @@
 {
   "name": "mimo-tui",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Terminal AI coding agent powered by Xiaomi MiMo - a CLI coding assistant",
   "main": "dist/index.js",
   "type": "module",
@@ -11,7 +11,8 @@
     "dist/",
     "assets/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=18"
@@ -27,7 +28,9 @@
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run build && npm run typecheck && npm test"
   },
   "keywords": [
     "cli",

@@ -105,6 +105,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
           const completed = text.slice(0, atStart) + matches[nextIdx] + text.slice(cursorPos);
           setText(completed);
           setCursorPos(atStart + matches[nextIdx].length);
+          // After full completion, reset so next Tab re-searches with new prefix
+          if (nextIdx === matches.length - 1) {
+            setAtIdx(-1);
+            setAtMatches([]);
+          }
         }
         return;
       }

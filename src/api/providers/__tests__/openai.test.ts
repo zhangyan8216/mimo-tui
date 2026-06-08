@@ -29,10 +29,10 @@ describe('OpenAIProvider', () => {
     expect(provider.isAborted).toBe(false);
   });
 
-  it('abort without prior streamChat is a no-op', () => {
+  it('abort marks provider as aborted', () => {
     const provider = new OpenAIProvider('test-key');
     provider.abort();
-    expect(provider.isAborted).toBe(false);
+    expect(provider.isAborted).toBe(true);
   });
 
   describe('message conversion (via chat method)', () => {

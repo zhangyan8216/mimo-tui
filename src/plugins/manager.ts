@@ -25,8 +25,6 @@ export class PluginManager {
    * then activate all of them.
    */
   async discoverAndActivate(cwd: string, config: Config): Promise<void> {
-    const context = new PluginContextImpl(config, cwd);
-
     // 1. Discover from local .mimo/plugins/ directory
     const localPlugins = this.discoverLocalPlugins(cwd);
     // 2. Discover from node_modules/mimo-plugin-* pattern
@@ -36,6 +34,8 @@ export class PluginManager {
 
     for (const entry of allEntries) {
       try {
+        // Create a separate context per plugin to avoid shared state
+        const context = new PluginContextImpl(config, cwd);
         const plugin = await this.loadPlugin(entry.pluginDir, entry.manifest);
         await plugin.activate(context);
 

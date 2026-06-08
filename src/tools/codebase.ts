@@ -418,7 +418,6 @@ export const codebaseTool: Tool = {
       case 'ast-symbols': {
         const parser = new AstParser(rootDir);
         parser.initialize();
-        const filePaths = collectFiles(rootDir);
         const parsedFiles: ParsedFile[] = [];
         for (const fp of filePaths) {
           const parsed = parser.parseFile(fp);

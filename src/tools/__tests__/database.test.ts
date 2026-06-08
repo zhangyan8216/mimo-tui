@@ -14,7 +14,7 @@ function makeCtx(): ToolContext {
     cwd: tmpDir,
     workingDirectory: tmpDir,
     sandbox: {
-      validatePath: () => ({ allowed: true, resolved: tmpDir }),
+      validatePath: (p: string) => ({ allowed: true, resolved: path.resolve(tmpDir, p) }),
     },
   } as unknown as ToolContext;
 }

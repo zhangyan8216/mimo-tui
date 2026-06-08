@@ -85,17 +85,20 @@ function queryWithLib(dbPath: string, sql: string): string {
   }
 }
 
-/** Fall back to sqlite3 CLI */
+/** Fall back to sqlite3 CLI — uses temp file for SQL to prevent shell injection */
 function queryWithCli(dbPath: string, sql: string): string {
-  const escapedSql = sql.replace(/"/g, '\\"');
+  const tmpSql = path.join(os.tmpdir(), `mimo-db-${Date.now()}.sql`);
+  fs.writeFileSync(tmpSql, sql, 'utf-8');
   try {
     const result = execSync(
-      `sqlite3 -header -column "${dbPath}" "${escapedSql}"`,
+      `sqlite3 -header -column "${dbPath.replace(/"/g, '\\"')}" < "${tmpSql}"`,
       { encoding: 'utf-8', timeout: 30_000, maxBuffer: MAX_OUTPUT }
     );
     return result.trim() || '（空结果集）';
   } catch (err) {
     throw new Error(`sqlite3 CLI error: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    try { fs.unlinkSync(tmpSql); } catch { /* ignore */ }
   }
 }
 
@@ -244,15 +247,21 @@ export const databaseTool: Tool = {
   },
   requiresApproval: true,
 
-  async execute(args: Record<string, unknown>, _ctx: ToolContext): Promise<string> {
+  async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
     const action = String(args.action);
     const dbPath = String(args.db_path);
 
     // Resolve relative paths against cwd
-    const resolvedPath = path.resolve(process.cwd(), dbPath);
+    const resolvedPath = path.resolve(ctx.cwd, dbPath);
 
-    if (!fs.existsSync(resolvedPath)) {
-      throw new Error(`Database file not found: ${resolvedPath}`);
+    // Sandbox validation
+    const validation = ctx.sandbox.validatePath(resolvedPath);
+    if (!validation.allowed) {
+      throw new Error(`Access denied: ${validation.reason}`);
+    }
+
+    if (!fs.existsSync(validation.resolved)) {
+      throw new Error(`Database file not found: ${validation.resolved}`);
     }
 
     switch (action) {

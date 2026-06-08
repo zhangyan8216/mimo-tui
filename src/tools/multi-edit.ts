@@ -89,14 +89,31 @@ export const multiEditTool: Tool = {
       });
     }
 
-    // Phase 2: Apply all edits (all validations passed)
+    // Phase 2: Apply all edits, grouping by file to handle multiple edits to the same file
+    const fileContents = new Map<string, string>(); // Track current content per file
     const results: string[] = [];
+
+    // First pass: load initial content for each unique file
     for (const v of validated) {
-      const updated = v.content.replace(v.oldText, v.newText);
-      fs.writeFileSync(v.resolved, updated, 'utf-8');
+      if (!fileContents.has(v.resolved)) {
+        fileContents.set(v.resolved, v.content);
+      }
+    }
+
+    // Second pass: apply edits sequentially per file
+    for (const v of validated) {
+      let currentContent = fileContents.get(v.resolved)!;
+      const updated = currentContent.replace(v.oldText, v.newText);
+      fileContents.set(v.resolved, updated); // Update the in-memory content for subsequent edits to same file
+
       const oldLines = v.oldText.split('\n').length;
       const newLines = v.newText.split('\n').length;
       results.push(`${v.resolved}: 替换 ${oldLines} 行为 ${newLines} 行`);
+    }
+
+    // Third pass: write all files once
+    for (const [filePath, content] of fileContents) {
+      fs.writeFileSync(filePath, content, 'utf-8');
     }
 
     return `已应用 ${results.length} 处编辑:\n${results.join('\n')}`;

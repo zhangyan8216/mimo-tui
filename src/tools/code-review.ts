@@ -36,10 +36,18 @@ export const codeReviewTool: Tool = {
 
     switch (action) {
       case 'diff':
-        diffContent = execSync('git diff', { cwd: ctx.cwd, encoding: 'utf-8', timeout: 10000 });
+        try {
+          diffContent = execSync('git diff', { cwd: ctx.cwd, encoding: 'utf-8', timeout: 10000 });
+        } catch {
+          return '错误: 无法获取 git diff。确保当前目录是 git 仓库。';
+        }
         break;
       case 'staged':
-        diffContent = execSync('git diff --staged', { cwd: ctx.cwd, encoding: 'utf-8', timeout: 10000 });
+        try {
+          diffContent = execSync('git diff --staged', { cwd: ctx.cwd, encoding: 'utf-8', timeout: 10000 });
+        } catch {
+          return '错误: 无法获取 staged diff。确保当前目录是 git 仓库。';
+        }
         break;
       case 'file':
         if (!target) return '错误: file action 需要 target 参数';

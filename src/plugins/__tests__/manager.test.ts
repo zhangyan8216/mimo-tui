@@ -28,7 +28,7 @@ describe('PluginManager', () => {
       await expect(
         manager.discoverAndActivate(tmpDir, {
           provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-          agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+          agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
           ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
           mcp: { servers: [] },
         })
@@ -42,7 +42,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(toolRegistry);
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });
@@ -86,7 +86,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(toolRegistry);
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });
@@ -129,7 +129,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(registry);
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });
@@ -162,7 +162,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(toolRegistry);
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });
@@ -194,7 +194,7 @@ describe('PluginManager', () => {
       const manager = new PluginManager(toolRegistry);
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });
@@ -216,7 +216,7 @@ describe('PluginManager', () => {
 
       await manager.discoverAndActivate(tmpDir, {
         provider: { apiKey: '', baseUrl: '', model: '', providerType: 'auto' },
-        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium' },
+        agent: { mode: 'agent', maxIterations: 32, autoApproveReads: true, thinkingEnabled: true, reasoningEffort: 'medium', maxConcurrentAgents: 5, agentTimeout: 120000, enableNestedAgents: true },
         ui: { theme: 'default', showThinking: true, showTokens: true, compactMode: false, locale: 'zh' },
         mcp: { servers: [] },
       });

@@ -75,6 +75,9 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ theme, onComplete, onC
               autoApproveReads: true,
               thinkingEnabled: true,
               reasoningEffort: 'medium',
+              maxConcurrentAgents: 5,
+              agentTimeout: 120000,
+              enableNestedAgents: true,
             },
             ui: {
               theme: 'default',
@@ -133,7 +136,7 @@ export const SetupWizard: React.FC<SetupWizardProps> = ({ theme, onComplete, onC
           </Box>
           <Box>
             <Text color={theme.accent}>API Key: </Text>
-            <Text>{apiKey ? '*'.repeat(apiKey.length) : inputBuffer}</Text>
+            <Text>{apiKey ? '*'.repeat(apiKey.length) : inputBuffer ? '*'.repeat(inputBuffer.length) : ''}</Text>
             <Text color={theme.primary}>▊</Text>
           </Box>
           <Box marginTop={1}>

@@ -40,14 +40,20 @@ export function sendNotification(title: string, body: string): void {
 
   if (platform === 'win32') {
     try {
+      // Escape single quotes for PowerShell (double them)
+      const safeTitle = title.replace(/'/g, "''");
+      const safeBody = body.replace(/'/g, "''");
       spawn('powershell', [
         '-c',
-        `Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(3000, '${title}', '${body}', 'Info')`,
+        `Add-Type -AssemblyName System.Windows.Forms; $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; $n.Visible = $true; $n.ShowBalloonTip(3000, '${safeTitle}', '${safeBody}', 'Info')`,
       ], { stdio: 'ignore', detached: true }).unref();
     } catch { /* ignore */ }
   } else if (platform === 'darwin') {
     try {
-      spawn('osascript', ['-e', `display notification "${body}" with title "${title}"`], {
+      // Escape double quotes for osascript
+      const safeTitle = title.replace(/"/g, '\\"');
+      const safeBody = body.replace(/"/g, '\\"');
+      spawn('osascript', ['-e', `display notification "${safeBody}" with title "${safeTitle}"`], {
         stdio: 'ignore',
         detached: true,
       }).unref();

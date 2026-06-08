@@ -35,9 +35,12 @@ export class FileWatcher {
   /** 监控目录 */
   watch(dir: string, callback: (change: FileChange) => void): void {
     this.onChange = callback;
+    this.watchDir(dir);
+  }
 
+  private watchDir(dir: string): void {
     try {
-      const watcher = fs.watch(dir, { recursive: true }, (eventType, filename) => {
+      const watcher = fs.watch(dir, (eventType, filename) => {
         if (!filename) return;
         const fullPath = path.join(dir, filename);
 
@@ -50,12 +53,33 @@ export class FileWatcher {
           timestamp: Date.now(),
         };
 
+        // On rename (created), if it's a new directory, start watching it too
+        if (change.type === 'created') {
+          try {
+            if (fs.statSync(fullPath).isDirectory() && !this.watchers.has(fullPath)) {
+              this.watchDir(fullPath);
+            }
+          } catch { /* ignore */ }
+        }
+
         this.changes.push(change);
         if (this.changes.length > 100) this.changes.shift();
         this.onChange?.(change);
       });
 
       this.watchers.set(dir, watcher);
+
+      // Recursively watch subdirectories for platforms where recursive doesn't work
+      if (process.platform === 'linux') {
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory() && !this.ignorePatterns.some(p => p.test(entry.name))) {
+              this.watchDir(path.join(dir, entry.name));
+            }
+          }
+        } catch { /* ignore */ }
+      }
     } catch { /* ignore */ }
   }
 

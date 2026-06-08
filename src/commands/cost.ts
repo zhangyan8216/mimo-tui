@@ -68,8 +68,9 @@ export function handleCostCommand(cmd: string, cmdArgs: string[], ctx: CommandCo
     case 'tokens': {
       const u = usage;
       const maxTokens = 128000;
-      const pct = Math.round((u.totalTokens / maxTokens) * 100);
-      const bar = '█'.repeat(Math.round(pct / 5)) + '░'.repeat(20 - Math.round(pct / 5));
+      const pct = Math.min(100, Math.max(0, Math.round((u.totalTokens / maxTokens) * 100)));
+      const filled = Math.min(20, Math.max(0, Math.round(pct / 5)));
+      const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
       const warning = pct > 80 ? '\n⚠️ **上下文即将用满，建议 /compact 压缩**' : '';
       setMessages(prev => [...prev, {
         role: 'assistant',

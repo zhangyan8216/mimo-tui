@@ -37,7 +37,7 @@ export function calculateCost(
   cacheHitTokens: number,
 ): number {
   const pricing = PRICING[model] || PRICING['mimo-v2.5-pro'];
-  const cacheMissTokens = inputTokens - cacheHitTokens;
+  const cacheMissTokens = Math.max(0, inputTokens - cacheHitTokens);
   const inputCost = (cacheMissTokens / 1_000_000) * pricing.input;
   const cacheCost = (cacheHitTokens / 1_000_000) * pricing.cacheHit;
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
@@ -48,7 +48,8 @@ export function logCost(record: CostRecord): void {
   try {
     let records: CostRecord[] = [];
     if (fs.existsSync(COST_LOG)) {
-      records = JSON.parse(fs.readFileSync(COST_LOG, 'utf-8'));
+      const parsed = JSON.parse(fs.readFileSync(COST_LOG, 'utf-8'));
+      records = Array.isArray(parsed) ? parsed : [];
     }
     records.push(record);
     // 只保留最近 1000 条

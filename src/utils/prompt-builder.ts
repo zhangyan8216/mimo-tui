@@ -31,6 +31,8 @@ export function buildSystemPrompt(input: PromptBuilderInput): string {
   const { projectCtx, config, mode, messageCount, toolCallCount, recentErrors } = input;
 
   // Cache: rebuild prompt only when significant state changes
+  // Never use cache when userMessage is provided (task analysis is message-specific)
+  // Never cache a result that was built with userMessage (would be stale)
   const key = JSON.stringify({
     mode: input.mode,
     msgBucket: Math.floor(messageCount / 5),
@@ -134,8 +136,11 @@ ${recentErrors.map(e => `- ${e}`).join('\n')}
 - 不要输出大段解释，直接行动`);
 
   const result = sections.join('\n\n');
-  cachedPrompt = result;
-  cachedPromptKey = key;
+  // Only cache the base prompt (without message-specific task analysis)
+  if (!input.userMessage) {
+    cachedPrompt = result;
+    cachedPromptKey = key;
+  }
   return result;
 }
 

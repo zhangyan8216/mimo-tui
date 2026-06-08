@@ -194,6 +194,7 @@ export class AgentLoop {
         consecutiveEmptyResponses++;
         if (consecutiveEmptyResponses >= 2) {
           log('warn', `MiMo 连续 ${consecutiveEmptyResponses} 次空响应，注入引导`);
+          consecutiveEmptyResponses = 0; // 重置计数，给模型新的机会
           this.messages.push({
             role: 'user',
             content: '[系统] 你没有回复任何内容也没有调用工具。请根据用户的需求使用工具完成任务。如果不确定怎么做，先用 codebase 或 read_file 了解情况。',
@@ -593,7 +594,7 @@ function isSafeCommand(cmd: string): boolean {
   const dangerous = [
     'rm -rf', 'rm -r', 'rmdir /s', 'format ', 'mkfs',
     'dd if=', 'shutdown', 'reboot', 'kill -9', 'killall',
-    'chmod 777', 'chown', 'curl.*|.*sh', 'wget.*|.*sh',
+    'chmod 777', 'chown', 'curl.*\\|.*sh', 'wget.*\\|.*sh',
     'drop table', 'drop database', 'truncate', 'delete from',
     'git push --force', 'git reset --hard', 'git clean -fd',
   ];
@@ -601,21 +602,31 @@ function isSafeCommand(cmd: string): boolean {
     if (new RegExp(d, 'i').test(cmd)) return false;
   }
 
-  // 安全命令前缀 — 自动通过
+  // 安全命令前缀 — 自动通过（只允许只读或低风险操作）
   const safe = [
+    // Git 只读操作
     'git status', 'git diff', 'git log', 'git show', 'git branch',
-    'git add', 'git commit', 'git stash', 'git fetch', 'git pull',
-    'git merge', 'git rebase', 'git cherry-pick', 'git tag',
-    'npm ', 'npx ', 'node ', 'yarn ', 'pnpm ',
-    'python ', 'pip ', 'pytest', 'go ', 'cargo ',
+    'git stash list', 'git stash show',
+    'git remote -v', 'git tag -l',
+    // Git 低风险写操作
+    'git add', 'git commit', 'git stash', 'git fetch',
+    // 包管理器（排除 publish/unpublish 等危险操作）
+    'npm test', 'npm run', 'npm install', 'npm ci', 'npm ls', 'npm outdated', 'npm audit',
+    'yarn ', 'pnpm ',
+    // 语言工具
+    'python ', 'pip install', 'pip list', 'pip show',
+    'pytest', 'go test', 'go build', 'go run', 'go mod',
+    'cargo test', 'cargo build', 'cargo run',
+    // 只读文件系统操作
     'ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'rg',
     'echo', 'pwd', 'which', 'where', 'whoami', 'date',
+    // 开发工具
     'tsc', 'eslint', 'prettier', 'vitest', 'jest',
-    'docker ps', 'docker logs', 'docker images',
-    'mkdir', 'cp ', 'mv ', 'touch', 'chmod',
+    // Docker 只读操作
+    'docker ps', 'docker logs', 'docker images', 'docker inspect',
   ];
   for (const s of safe) {
-    if (cmd.startsWith(s) || cmd.includes(s.trim())) return true;
+    if (cmd.startsWith(s)) return true;
   }
 
   // 包含管道/重定向但不危险 → 安全

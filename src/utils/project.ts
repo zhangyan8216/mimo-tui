@@ -33,6 +33,20 @@ export function detectProject(cwd?: string): ProjectInfo {
   };
 
   const hasFile = (f: string) => fs.existsSync(path.join(root, f));
+  const hasFileGlob = (pattern: string) => {
+    // Handle glob-like patterns (e.g., "*_test.go", "test_*.py")
+    try {
+      return fs.readdirSync(root).some(f => {
+        // Simple glob: * at start or end
+        if (pattern.startsWith('*')) return f.endsWith(pattern.slice(1));
+        if (pattern.endsWith('*')) return f.startsWith(pattern.slice(0, -1));
+        // Middle glob: test_*.py
+        const parts = pattern.split('*');
+        if (parts.length === 2) return f.startsWith(parts[0]) && f.endsWith(parts[1]);
+        return f === pattern;
+      });
+    } catch { return false; }
+  };
   const readFile = (f: string) => {
     try { return fs.readFileSync(path.join(root, f), 'utf-8'); } catch { return ''; }
   };
@@ -86,7 +100,7 @@ export function detectProject(cwd?: string): ProjectInfo {
     info.packageManager = hasFile('poetry.lock') ? 'poetry' : hasFile('uv.lock') ? 'uv' : 'pip';
     if (hasFile('manage.py')) { info.framework = 'Django'; info.type = 'Web 应用'; }
     else if (hasFile('app.py') || hasFile('main.py')) { info.type = 'Python 项目'; }
-    info.hasTests = hasFile('tests') || hasFile('test_*.py');
+    info.hasTests = hasFile('tests') || hasFileGlob('test_*.py');
     return info;
   }
 
@@ -95,7 +109,7 @@ export function detectProject(cwd?: string): ProjectInfo {
     info.language = 'Go';
     info.type = 'Go 项目';
     info.packageManager = 'go mod';
-    info.hasTests = hasFile('*_test.go');
+    info.hasTests = hasFileGlob('*_test.go') || hasFile('tests');
     return info;
   }
 

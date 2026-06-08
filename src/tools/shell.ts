@@ -36,7 +36,7 @@ export const shellTool: Tool = {
       const proc = spawn(shell, shellArgs, {
         cwd: ctx.cwd,
         env: { ...process.env },
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
       let stdout = '';
@@ -46,7 +46,7 @@ export const shellTool: Tool = {
       proc.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
         if (stdout.length > 100_000) {
-          proc.kill();
+          if (!settled) proc.kill();
           stdout += '\n... (输出在 100KB 处截断)';
         }
       });
@@ -54,7 +54,7 @@ export const shellTool: Tool = {
       proc.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
         if (stderr.length > 50_000) {
-          proc.kill();
+          if (!settled) proc.kill();
           stderr += '\n... (错误输出在 50KB 处截断)';
         }
       });

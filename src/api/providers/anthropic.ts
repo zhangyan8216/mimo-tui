@@ -46,7 +46,10 @@ export function repairJson(raw: string): string {
   s = s.replace(/^﻿/, '').replace(/[​‌‍﻿]/g, '');
 
   // 2. 去掉行注释 // ... 和块注释 /* ... */
-  s = s.replace(/\/\/[^\n]*/g, '');
+  // 只处理字符串外部的注释，避免破坏 URL (如 "https://example.com")
+  s = s.replace(/("(?:[^"\\]|\\.)*")|\/\/[^\n]*/g, (match, quoted) => {
+    return quoted || ''; // 保留字符串内容，只去掉字符串外的注释
+  });
   s = s.replace(/\/\*[\s\S]*?\*\//g, '');
 
   // 3. 尝试直接解析
@@ -97,7 +100,7 @@ export function repairJson(raw: string): string {
   // 9. 最后手段: 提取第一个完整的 JSON 对象
   const match = s.match(/\{[\s\S]*\}/);
   if (match) {
-    let candidate = match[0].replace(/,\s*([\]}])/g, '$1');
+    const candidate = match[0].replace(/,\s*([\]}])/g, '$1');
     try { JSON.parse(candidate); return candidate; } catch { /* give up */ }
   }
 
@@ -112,6 +115,7 @@ export class AnthropicProvider implements ProviderAdapter {
   private apiKey: string;
   private model: string;
   private abortController: AbortController | null = null;
+  private _aborted = false;
 
   constructor(apiKey: string, baseUrl: string, model: string) {
     this.apiKey = apiKey;
@@ -132,7 +136,7 @@ export class AnthropicProvider implements ProviderAdapter {
 
     for (const msg of messages) {
       if (msg.role === 'system') {
-        system = msg.content || '';
+        system += (system ? '\n\n' : '') + (msg.content || '');
         continue;
       }
 
@@ -269,7 +273,9 @@ export class AnthropicProvider implements ProviderAdapter {
     tools?: ToolDefinition[],
     options?: ChatOptions,
   ): AsyncGenerator<StreamEvent> {
+    this.abortController?.abort(); // Abort any existing stream before creating new one
     this.abortController = new AbortController();
+    this._aborted = false;
 
     const { system, anthropicMessages } = this.convertMessages(messages);
 
@@ -295,16 +301,19 @@ export class AnthropicProvider implements ProviderAdapter {
     // 缓存历史消息: 在倒数第 4 条消息上加 cache_control（缓存旧消息）
     if (body.messages.length > 4) {
       const cacheIdx = body.messages.length - 4;
-      const cacheMsg = body.messages[cacheIdx];
+      // 不修改原始消息，创建副本以避免重复添加 cache marker
+      const original = body.messages[cacheIdx];
+      const cacheMsg = { ...original };
       if (typeof cacheMsg.content === 'string') {
         cacheMsg.content = [
           { type: 'text' as const, text: cacheMsg.content },
           { type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } },
         ];
       } else if (Array.isArray(cacheMsg.content)) {
-        // 在已有 content blocks 末尾追加 cache marker
-        cacheMsg.content.push({ type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } });
+        cacheMsg.content = [...cacheMsg.content, { type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } }];
       }
+      body.messages = [...body.messages]; // shallow copy the array
+      body.messages[cacheIdx] = cacheMsg;
     }
     if (options?.temperature !== undefined) body.temperature = options.temperature;
 
@@ -406,7 +415,7 @@ export class AnthropicProvider implements ProviderAdapter {
               completionTokens: u.output_tokens,
               totalTokens: u.input_tokens + u.output_tokens,
               cacheHitTokens: u.cache_read_input_tokens || 0,
-              cacheMissTokens: u.input_tokens - (u.cache_read_input_tokens || 0),
+              cacheMissTokens: Math.max(0, u.input_tokens - (u.cache_read_input_tokens || 0)),
             },
           };
         }
@@ -502,15 +511,18 @@ export class AnthropicProvider implements ProviderAdapter {
     // 缓存历史消息
     if (body.messages.length > 4) {
       const cacheIdx = body.messages.length - 4;
-      const cacheMsg = body.messages[cacheIdx];
+      const original = body.messages[cacheIdx];
+      const cacheMsg = { ...original };
       if (typeof cacheMsg.content === 'string') {
         cacheMsg.content = [
           { type: 'text' as const, text: cacheMsg.content },
           { type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } },
         ];
       } else if (Array.isArray(cacheMsg.content)) {
-        cacheMsg.content.push({ type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } });
+        cacheMsg.content = [...cacheMsg.content, { type: 'text' as const, text: '', cache_control: { type: 'ephemeral' as const } }];
       }
+      body.messages = [...body.messages];
+      body.messages[cacheIdx] = cacheMsg;
     }
 
     const url = `${this.baseUrl}/v1/messages`;
@@ -563,7 +575,7 @@ export class AnthropicProvider implements ProviderAdapter {
       completionTokens: result.usage.output_tokens,
       totalTokens: result.usage.input_tokens + result.usage.output_tokens,
       cacheHitTokens: result.usage.cache_read_input_tokens || 0,
-      cacheMissTokens: result.usage.input_tokens - (result.usage.cache_read_input_tokens || 0),
+      cacheMissTokens: Math.max(0, result.usage.input_tokens - (result.usage.cache_read_input_tokens || 0)),
     };
 
     return {
@@ -573,6 +585,7 @@ export class AnthropicProvider implements ProviderAdapter {
   }
 
   abort(): void {
+    this._aborted = true;
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
@@ -580,6 +593,6 @@ export class AnthropicProvider implements ProviderAdapter {
   }
 
   get isAborted(): boolean {
-    return this.abortController?.signal.aborted ?? false;
+    return this._aborted;
   }
 }

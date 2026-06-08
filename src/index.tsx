@@ -4,9 +4,41 @@
 import React from 'react';
 import { render } from 'ink';
 import yargsParser from 'yargs-parser';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { App } from './tui/App.js';
 import { loadConfig, configExists, saveConfig } from './config.js';
-import { initLogger, closeLogger } from './utils/logger.js';
+import { initLogger, closeLogger, log } from './utils/logger.js';
+
+// Read version from package.json at runtime
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let APP_VERSION = '1.0.0';
+try {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+  APP_VERSION = pkg.version || '1.0.0';
+} catch { /* fallback */ }
+
+// Graceful shutdown handlers
+let isShuttingDown = false;
+function gracefulShutdown(code: number) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  log('info', `Shutting down (exit code ${code})`);
+  closeLogger();
+  process.exit(code);
+}
+
+process.on('SIGINT', () => gracefulShutdown(130));
+process.on('SIGTERM', () => gracefulShutdown(143));
+process.on('unhandledRejection', (reason) => {
+  log('error', 'Unhandled promise rejection', reason);
+  // Don't exit — let the process continue, but log it
+});
+process.on('uncaughtException', (err) => {
+  log('error', 'Uncaught exception', err);
+  gracefulShutdown(1);
+});
 
 const args = yargsParser(process.argv.slice(2), {
   alias: {
@@ -55,7 +87,7 @@ if (args.help) {
 
 // Version
 if (args.version) {
-  console.log('mimo-tui v1.0.0');
+  console.log(`mimo-tui v${APP_VERSION}`);
   process.exit(0);
 }
 
@@ -87,6 +119,5 @@ const { waitUntilExit } = render(
 
 // Cleanup on exit
 waitUntilExit().then(() => {
-  closeLogger();
-  process.exit(0);
+  gracefulShutdown(0);
 });
