@@ -5,3 +5,4 @@ dist/
 Thumbs.db
 .mimo/
 *.db
+mimo-tui-*.tgz
