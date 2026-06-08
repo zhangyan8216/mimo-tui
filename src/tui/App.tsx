@@ -333,6 +333,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       autoCommit,
       autoTest,
       systemPrompt,
+      skills,
       streamTimerRef,
       setFileChanges,
       handleSlashCommand: (t: string) => handleSlashCommandRef.current(t),
@@ -924,6 +925,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
               'bookmark', 'stats', 'context', 'shortcuts', 'remember', 'forget', 'workflow',
               'suggest', 'watch', 'chain', 'cd', 'think', 'fix', 'improve', 'batch', 'sub', 'tips',
               'parallel', 'explore', 'review', 'status', 'auto', 'pipeline', 'kill', 'clean', 'metrics', 'kb', 'monitor',
+              'install', 'uninstall', 'skills', 'mcp',
             ]}
             initialHistory={commandHistory.current.getAll()}
           />

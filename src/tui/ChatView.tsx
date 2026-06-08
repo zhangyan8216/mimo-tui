@@ -26,7 +26,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
         <Box marginBottom={1}>
           <Text color={theme.tone.brand} bold>  🐱  Mimo TUI  </Text>
-          <Text color={theme.fg.sub}>v1.2.0</Text>
+          <Text color={theme.fg.sub}>v1.3.0</Text>
         </Box>
         <Box marginBottom={2}>
           <Text color={theme.fg.sub}>终端 AI 编程助手</Text>

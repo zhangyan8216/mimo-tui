@@ -10,6 +10,7 @@ import type { SubAgentManager } from '../agent/sub-agent.js';
 import type { FileWatcher } from '../utils/watcher.js';
 import type { SnippetLibrary } from '../utils/snippets.js';
 import type { MemoryStore } from '../utils/memory.js';
+import type { Skill } from '../api/types.js';
 import type { KnowledgeBase } from '../utils/knowledge-base.js';
 import type { CommandHistory } from '../utils/history.js';
 import type { Workflow } from '../utils/workflow.js';
@@ -51,6 +52,7 @@ export interface CommandContext {
   autoCommit: React.MutableRefObject<boolean>;
   autoTest: React.MutableRefObject<boolean>;
   systemPrompt: React.MutableRefObject<string>;
+  skills: React.MutableRefObject<Skill[]>;
   streamTimerRef: React.MutableRefObject<ReturnType<typeof setInterval> | null>;
   setFileChanges: React.Dispatch<React.SetStateAction<string>>;
   handleSlashCommand: (text: string) => void;

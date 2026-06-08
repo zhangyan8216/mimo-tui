@@ -633,5 +633,163 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
       setMessages(prev => [...prev, { role: 'assistant', content: report }]);
       break;
     }
+
+    // ===== 安装 Skills / MCP =====
+    case 'install': {
+      const type = cmdArgs[0]; // 'skill' or 'mcp'
+      const rest = cmdArgs.slice(1);
+
+      if (!type) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '📦 **安装命令**\n\n`/install skill <source>` 安装 Skill\n  - URL: `/install skill https://example.com/skill.md`\n  - npm: `/install skill mimo-skill-code-review`\n  - 本地: `/install skill ./my-skill.md`\n\n`/install mcp <name> <command> [args...]` 安装 MCP 服务器\n  - 示例: `/install mcp filesystem npx -y @modelcontextprotocol/server-filesystem`\n\n`/skills` 查看已安装 Skills\n`/mcp` 查看已连接 MCP 服务器' }]);
+        break;
+      }
+
+      if (type === 'skill') {
+        const source = rest.join(' ');
+        if (!source) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: `/install skill <URL|npm包名|本地路径>`' }]);
+          break;
+        }
+        setMessages(prev => [...prev, { role: 'assistant', content: `📦 正在安装 Skill: ${source}...` }]);
+        import('../tools/install.js').then(async ({ installSkill }) => {
+          try {
+            const result = await installSkill(source);
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `✅ Skill 已安装!\n\n- **名称**: ${result.name}\n- **描述**: ${result.description}\n- **触发词**: ${result.triggers.join(', ') || '(无)'}\n- **路径**: \`${result.path}\`\n- **来源**: ${result.source}`,
+            }]);
+            // Reload skills if the ref is available
+            if (ctx.skills?.current !== undefined) {
+              const { loadSkills } = await import('../skills/loader.js');
+              ctx.skills.current = loadSkills(process.cwd());
+            }
+          } catch (err) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 安装失败: ${err instanceof Error ? err.message : String(err)}` }]);
+          }
+        });
+        break;
+      }
+
+      if (type === 'mcp') {
+        if (rest.length < 2) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法: `/install mcp <name> <command> [args...]`\n示例: `/install mcp filesystem npx -y @modelcontextprotocol/server-filesystem`' }]);
+          break;
+        }
+        import('../tools/install.js').then(async ({ parseMcpInstallArgs }) => {
+          try {
+            const serverConfig = parseMcpInstallArgs(rest.join(' '));
+            const { addMcpServer } = await import('../config.js');
+            const newConfig = addMcpServer(configRef.current, serverConfig);
+            setConfig(newConfig);
+
+            // Connect the new MCP server
+            const { MCPClient } = await import('../mcp/client.js');
+            const mcpClient = ctx.mcpClient?.current;
+            if (mcpClient) {
+              setMessages(prev => [...prev, { role: 'assistant', content: `🔌 正在连接 MCP 服务器: ${serverConfig.name}...` }]);
+              try {
+                await mcpClient.connectServer(serverConfig);
+                const defs = mcpClient.getAllToolDefinitions();
+                // Register new tools
+                for (const def of defs) {
+                  const existingTools = toolRegistry.current;
+                  if (!existingTools.allToolNames.includes(def.function.name)) {
+                    const { MCPClient: MC } = await import('../mcp/client.js');
+                    existingTools.register({
+                      name: def.function.name,
+                      description: def.function.description,
+                      parameters: def.function.parameters,
+                      execute: async (args) => mcpClient.callTool(serverConfig.name, def.function.name.replace(`mcp_${serverConfig.name}_`, ''), args),
+                    });
+                  }
+                }
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${serverConfig.name}** 已安装并连接!\n- 命令: \`${serverConfig.command} ${(serverConfig.args || []).join(' ')}\`\n- 已发现 ${defs.length} 个工具\n- 配置已保存到 ~/.mimo/config.toml` }]);
+              } catch (err) {
+                setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ MCP 服务器已保存到配置，但连接失败: ${err instanceof Error ? err.message : String(err)}\n重启后会自动重试。` }]);
+              }
+            } else {
+              setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${serverConfig.name}** 已保存到配置，重启后自动连接。` }]);
+            }
+          } catch (err) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 安装失败: ${err instanceof Error ? err.message : String(err)}` }]);
+          }
+        });
+        break;
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: `❓ 未知类型: ${type}。使用 \`skill\` 或 \`mcp\`` }]);
+      break;
+    }
+
+    case 'uninstall': {
+      const type = cmdArgs[0];
+      const name = cmdArgs[1];
+
+      if (!type || !name) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '❓ 用法:\n`/uninstall skill <name>` 卸载 Skill\n`/uninstall mcp <name>` 卸载 MCP 服务器' }]);
+        break;
+      }
+
+      if (type === 'skill') {
+        import('../tools/install.js').then(async ({ uninstallSkill }) => {
+          const result = uninstallSkill(name);
+          if (result.removed) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `✅ Skill **${name}** 已卸载` }]);
+            // Reload skills
+            if (ctx.skills?.current !== undefined) {
+              const { loadSkills } = await import('../skills/loader.js');
+              ctx.skills.current = loadSkills(process.cwd());
+            }
+          } else {
+            setMessages(prev => [...prev, { role: 'assistant', content: `❌ 未找到 Skill: ${name}` }]);
+          }
+        });
+        break;
+      }
+
+      if (type === 'mcp') {
+        const { removeMcpServer } = require('../config.js');
+        const newConfig = removeMcpServer(configRef.current, name);
+        setConfig(newConfig);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${name}** 已从配置中移除。重启后生效。` }]);
+        break;
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: `❓ 未知类型: ${type}。使用 \`skill\` 或 \`mcp\`` }]);
+      break;
+    }
+
+    case 'skills': {
+      import('../tools/install.js').then(async ({ listInstalledSkills }) => {
+        const skills = listInstalledSkills();
+        if (skills.length === 0) {
+          setMessages(prev => [...prev, { role: 'assistant', content: '📭 未安装任何 Skill。\n\n用 `/install skill <source>` 安装。' }]);
+        } else {
+          const list = skills.map(s => {
+            const triggers = s.triggers?.length ? ` [${s.triggers.join(', ')}]` : '';
+            return `- **${s.name}**${triggers} — ${s.description || '(无描述)'}`;
+          }).join('\n');
+          setMessages(prev => [...prev, { role: 'assistant', content: `🎯 **已安装 Skills** (${skills.length} 个)\n${list}\n\n\`/install skill\` 安装 · \`/uninstall skill\` 卸载` }]);
+        }
+      });
+      break;
+    }
+
+    case 'mcp': {
+      const servers = configRef.current.mcp.servers;
+      if (servers.length === 0) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '📭 未配置任何 MCP 服务器。\n\n用 `/install mcp <name> <command> [args...]` 安装。' }]);
+      } else {
+        const list = servers.map(s => {
+          const cmd = s.transport === 'stdio' ? `\`${s.command} ${(s.args || []).join(' ')}\`` : s.url || '(无)';
+          return `- **${s.name}** (${s.transport}) ${cmd}`;
+        }).join('\n');
+        // Also show connected tools
+        const mcpClient = ctx.mcpClient?.current;
+        const toolCount = mcpClient ? mcpClient.getAllToolDefinitions().length : 0;
+        setMessages(prev => [...prev, { role: 'assistant', content: `🔌 **MCP 服务器** (${servers.length} 个, ${toolCount} 个工具)\n${list}\n\n\`/install mcp\` 安装 · \`/uninstall mcp\` 卸载` }]);
+      }
+      break;
+    }
   }
 }

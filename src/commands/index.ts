@@ -90,6 +90,10 @@ export function handleSlashCommand(cmd: string, cmdArgs: string[], ctx: CommandC
     case 'auto':
     case 'kb':
     case 'monitor':
+    case 'install':
+    case 'uninstall':
+    case 'skills':
+    case 'mcp':
       handleToolsCommand(cmd, cmdArgs, ctx);
       return true;
 

@@ -138,7 +138,7 @@ function escapeTomlString(s: string): string {
 export function saveConfig(config: Config): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
 
-  const toml = `[provider]
+  let toml = `[provider]
 api_key = "${escapeTomlString(config.provider.apiKey)}"
 base_url = "${escapeTomlString(config.provider.baseUrl)}"
 model = "${escapeTomlString(config.provider.model)}"
@@ -150,6 +150,9 @@ max_iterations = ${config.agent.maxIterations}
 auto_approve_reads = ${config.agent.autoApproveReads}
 thinking_enabled = ${config.agent.thinkingEnabled}
 reasoning_effort = "${config.agent.reasoningEffort}"
+max_concurrent_agents = ${config.agent.maxConcurrentAgents}
+agent_timeout = ${config.agent.agentTimeout}
+enable_nested_agents = ${config.agent.enableNestedAgents}
 
 [ui]
 theme = "${escapeTomlString(config.ui.theme)}"
@@ -159,7 +162,42 @@ compact_mode = ${config.ui.compactMode}
 locale = "${config.ui.locale}"
 `;
 
+  // Persist MCP server configs
+  if (config.mcp.servers.length > 0) {
+    toml += '\n[mcp]\n';
+    for (const server of config.mcp.servers) {
+      toml += `\n[[mcp.servers]]\n`;
+      toml += `name = "${escapeTomlString(server.name)}"\n`;
+      toml += `transport = "${server.transport}"\n`;
+      if (server.command) toml += `command = "${escapeTomlString(server.command)}"\n`;
+      if (server.args && server.args.length > 0) {
+        toml += `args = [${server.args.map(a => `"${escapeTomlString(a)}"`).join(', ')}]\n`;
+      }
+      if (server.url) toml += `url = "${escapeTomlString(server.url)}"\n`;
+      if (server.env && Object.keys(server.env).length > 0) {
+        const envPairs = Object.entries(server.env).map(([k, v]) => `${k} = "${escapeTomlString(v)}"`).join(', ');
+        toml += `env = { ${envPairs} }\n`;
+      }
+    }
+  }
+
   fs.writeFileSync(CONFIG_FILE, toml, 'utf-8');
+}
+
+/** Add an MCP server to config and save */
+export function addMcpServer(config: Config, server: MCPServerConfig): Config {
+  // Remove existing server with same name
+  const filtered = config.mcp.servers.filter(s => s.name !== server.name);
+  const updated = { ...config, mcp: { servers: [...filtered, server] } };
+  saveConfig(updated);
+  return updated;
+}
+
+/** Remove an MCP server from config and save */
+export function removeMcpServer(config: Config, name: string): Config {
+  const updated = { ...config, mcp: { servers: config.mcp.servers.filter(s => s.name !== name) } };
+  saveConfig(updated);
+  return updated;
 }
 
 export function configExists(): boolean {

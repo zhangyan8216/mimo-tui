@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0 (2025-06-08)
+
+### 🚀 New Features — Skill & MCP Installation
+
+- **`/install skill <source>`** — Install skills from URL, npm package, or local path
+- **`/install mcp <name> <command> [args...]`** — Install and connect MCP servers
+- **`/uninstall skill <name>`** — Remove installed skills
+- **`/uninstall mcp <name>`** — Remove MCP server from config
+- **`/skills`** — List all installed skills with triggers
+- **`/mcp`** — List connected MCP servers and their tools
+- **MCP config persistence** — `saveConfig()` now writes `[mcp.servers]` to TOML
+- **`addMcpServer()` / `removeMcpServer()`** — Config helper functions
+
 ## v1.2.0 (2025-06-08)
 
 ### 🎨 UX/Interactivity Overhaul (20+ improvements)
