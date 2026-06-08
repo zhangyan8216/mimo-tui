@@ -35,8 +35,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   const modeConfig = getModeConfig(mode);
   const modeColor = theme.pill.mode[mode] || theme.tone.brand;
 
-  // 上下文进度条
-  const contextPct = usage.totalTokens > 0 ? Math.min(usage.totalTokens / 128000, 1) : 0;
+  // 上下文进度条 (MiMo models support 200K context)
+  const maxContext = 200000;
+  const contextPct = usage.totalTokens > 0 ? Math.min(usage.totalTokens / maxContext, 1) : 0;
   const barWidth = 8;
   const filled = Math.round(contextPct * barWidth);
   const contextBar = '█'.repeat(filled) + '░'.repeat(barWidth - filled);

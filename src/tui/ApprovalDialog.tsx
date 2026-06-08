@@ -16,30 +16,37 @@ export const ApprovalDialog: React.FC<ApprovalDialogProps> = ({ toolName, args, 
   const isDanger = isDangerous(toolName, args);
 
   useInput((input, key) => {
-    if (input === 'y' || key.return) onApprove(false);
-    else if (input === 'a') onApprove(true);
-    else if (input === 'n' || key.escape) onDeny();
+    const lower = input?.toLowerCase();
+    if (lower === 'y' || key.return) onApprove(false);
+    else if (lower === 'a') onApprove(true);
+    else if (lower === 'n' || key.escape) onDeny();
   });
 
   return (
-    <Box borderStyle="single" borderColor={isDanger ? theme.tone.err : theme.tone.warn} paddingX={1} marginY={0} gap={1}>
-      {/* 左侧：图标 + 工具 + 参数摘要 */}
-      <Text>
+    <Box flexDirection="column" borderStyle="single" borderColor={isDanger ? theme.tone.err : theme.tone.warn} paddingX={1} marginY={0}>
+      {/* Main line */}
+      <Box gap={1}>
         <Text color={isDanger ? theme.tone.err : theme.tone.warn} bold>
           {isDanger ? '🚨' : '⚡'} {getToolLabel(toolName)}
         </Text>
-        <Text color={theme.fg.faint}> │ </Text>
+        <Text color={theme.fg.faint}>│</Text>
         <Text color={theme.fg.sub}>{getArgSummary(toolName, args)}</Text>
-      </Text>
-
-      {/* 右侧：操作提示 */}
-      <Text>
-        <Text color={theme.tone.ok} bold>y</Text>
-        <Text color={theme.fg.meta}>/</Text>
-        <Text color={theme.tone.accent} bold>a</Text>
-        <Text color={theme.fg.meta}>/</Text>
-        <Text color={theme.tone.err} bold>n</Text>
-      </Text>
+      </Box>
+      {/* Actions */}
+      <Box gap={2}>
+        <Text>
+          <Text color={theme.tone.ok} bold>[Y]</Text>
+          <Text color={theme.fg.meta}> 通过</Text>
+        </Text>
+        <Text>
+          <Text color={theme.tone.accent} bold>[A]</Text>
+          <Text color={theme.fg.meta}> 始终允许</Text>
+        </Text>
+        <Text>
+          <Text color={theme.tone.err} bold>[N]</Text>
+          <Text color={theme.fg.meta}> 拒绝</Text>
+        </Text>
+      </Box>
     </Box>
   );
 };
@@ -56,8 +63,9 @@ function isDangerous(toolName: string, args: Record<string, unknown>): boolean {
 
 function getToolLabel(name: string): string {
   const labels: Record<string, string> = {
-    write_file: '写入', edit_file: '编辑', multi_edit: '批量编辑',
-    shell: '命令', web_fetch: '获取', docker: 'Docker',
+    write_file: '写入文件', edit_file: '编辑文件', multi_edit: '批量编辑',
+    shell: '执行命令', web_fetch: '获取网页', docker: 'Docker',
+    database: '数据库', test_runner: '运行测试', coverage: '覆盖率',
   };
   return labels[name] || name;
 }
@@ -73,12 +81,12 @@ function getArgSummary(toolName: string, args: Record<string, unknown>): string 
       return `${edits.length}个文件`;
     }
     case 'shell':
-      return String(args.command || '').slice(0, 60);
+      return String(args.command || '').slice(0, 80);
     case 'web_fetch':
-      return String(args.url || '').slice(0, 60);
+      return String(args.url || '').slice(0, 80);
     case 'docker':
       return `docker ${args.action} ${args.target || ''}`;
     default:
-      return JSON.stringify(args).slice(0, 60);
+      return JSON.stringify(args).slice(0, 80);
   }
 }

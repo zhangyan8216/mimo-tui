@@ -151,6 +151,39 @@ export const InputArea: React.FC<InputAreaProps> = ({
     if (key.ctrl && input === 'e') { setCursorPos(text.length); return; }
     if (key.ctrl && input === 'u') { setText(''); setCursorPos(0); return; }
 
+    // Ctrl+W: delete word backward
+    if (key.ctrl && input === 'w') {
+      const before = text.slice(0, cursorPos);
+      const after = text.slice(cursorPos);
+      // Delete trailing spaces then the last word
+      const trimmed = before.replace(/\s+$/, '').replace(/\S+$/, '');
+      setText(trimmed + after);
+      setCursorPos(trimmed.length);
+      return;
+    }
+
+    // Ctrl+Left: move cursor one word left
+    if (key.ctrl && key.leftArrow) {
+      const before = text.slice(0, cursorPos);
+      const match = before.match(/\S+\s*$/);
+      if (match) setCursorPos(cursorPos - match[0].length);
+      else setCursorPos(0);
+      return;
+    }
+
+    // Ctrl+Right: move cursor one word right
+    if (key.ctrl && key.rightArrow) {
+      const after = text.slice(cursorPos);
+      const match = after.match(/^\s*\S+/);
+      if (match) setCursorPos(cursorPos + match[0].length);
+      else setCursorPos(text.length);
+      return;
+    }
+
+    // Arrow keys for cursor movement
+    if (key.leftArrow && !key.ctrl) { setCursorPos(Math.max(0, cursorPos - 1)); return; }
+    if (key.rightArrow && !key.ctrl) { setCursorPos(Math.min(text.length, cursorPos + 1)); return; }
+
     // 普通输入
     if (input && !key.ctrl && !key.meta) {
       setText(prev => prev.slice(0, cursorPos) + input + prev.slice(cursorPos));
@@ -187,7 +220,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
           {lineCount > 1 ? `${lineCount} 行` : hasSlash ? 'Tab 补全' : hasAt ? 'Tab 补全' : ''}
         </Text>
         <Text color={theme.fg.faint}>
-          Enter 发送 · Shift+Enter 换行 · ↑↓ 历史
+          Enter 发送 · Shift+Enter 换行 · ↑↓ 历史 · Ctrl+W 删词
         </Text>
       </Box>
     </Box>

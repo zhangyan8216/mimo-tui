@@ -548,10 +548,22 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           });
         },
         onToolResult: (name, result, error) => {
-          // Clear all streaming tool calls when any tool completes
+          // Clear streaming tool calls when any tool completes
           setStreamingToolCalls(new Map());
           setToolResults(prev => {
             const next = new Map(prev);
+            // Match by name + running status (most specific match first)
+            for (const [id, val] of next) {
+              if (val.status === 'running' && id.includes(name)) {
+                next.set(id, {
+                  result,
+                  error,
+                  status: error ? 'failed' : 'completed',
+                });
+                return next;
+              }
+            }
+            // Fallback: mark first running entry
             for (const [id, val] of next) {
               if (val.status === 'running') {
                 next.set(id, {
@@ -559,7 +571,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
                   error,
                   status: error ? 'failed' : 'completed',
                 });
-                break;
+                return next;
               }
             }
             return next;
@@ -690,8 +702,19 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         agentLoop.current?.abort();
         agentLoop.current = null;
         if (streamTimerRef.current) { clearInterval(streamTimerRef.current); streamTimerRef.current = null; }
+        // Preserve partial streamed content instead of discarding it
+        const partial = streamBufferRef.current.content;
+        const partialThinking = streamBufferRef.current.thinking;
+        if (partial || partialThinking) {
+          setMessages(prev => [...prev, {
+            role: 'assistant' as const,
+            content: partial ? partial + '\n\n⚠️ *(已中断)*' : '⚠️ *(已中断)*',
+          }]);
+        }
         setIsStreaming(false);
         setIsThinking(false);
+        setStreamingContent('');
+        setStreamingThinking('');
       } else if (overlay !== 'none') {
         setOverlay('none');
       } else {
@@ -715,7 +738,8 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
       return;
     }
     if (key.ctrl && input === 'l') { setMessages([]); return; }
-    if (input === '?') { setOverlay('help'); }
+    // F1 help: Ctrl+? as fallback since Ink doesn't expose F1
+    if (key.ctrl && input === '/') { setOverlay('help'); return; }
 
     // Alt+1/2/3 快速切换模式 (持久化到配置)
     if (key.meta && input === '1') {
@@ -853,7 +877,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         <HelpOverlay theme={theme} onClose={() => setOverlay('none')} />
       )}
 
-      {/* Approval Dialog */}
+      {/* Approval Dialog — shown above chat, not replacing it */}
       {approvalPending && (
         <ApprovalDialog
           toolName={approvalPending.toolName}
@@ -864,8 +888,8 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
         />
       )}
 
-      {/* Main chat area */}
-      {overlay === 'none' && !approvalPending && (
+      {/* Main chat area — visible unless a full-screen overlay is active */}
+      {overlay === 'none' && (
         <>
           <ChatView
             messages={messages}
@@ -891,8 +915,8 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
                 setIsThinking(false);
               }
             }}
-            disabled={false}
-            placeholder={isStreaming ? 'MiMo 思考中...（Ctrl+C 取消）' : '输入消息...'}
+            disabled={!!approvalPending}
+            placeholder={approvalPending ? '等待审批...' : isStreaming ? 'MiMo 思考中...（Ctrl+C 取消）' : '输入消息...'}
             slashCommands={[
               'new', 'fork', 'save', 'list', 'mode', 'model', 'clear', 'compact', 'help', 'retry', 'undo',
               'export', 'git', 'tree', 'project', 'cost', 'theme', 'debug', 'health', 'doctor',

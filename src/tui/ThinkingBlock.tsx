@@ -19,7 +19,8 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 }) => {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [spinnerIdx, setSpinnerIdx] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startTimeRef = React.useRef(Date.now());
   const collapsed = externalCollapsed ?? internalCollapsed;
 
   // Auto-collapse when streaming ends
@@ -29,12 +30,12 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
     }
   }, [streaming, externalCollapsed]);
 
-  // Spinner animation
+  // Spinner animation + elapsed time
   useEffect(() => {
     if (!streaming) return;
     const timer = setInterval(() => {
       setSpinnerIdx(prev => (prev + 1) % SPINNER.length);
-      setElapsed(prev => prev + 1);
+      setElapsedMs(Date.now() - startTimeRef.current);
     }, 100);
     return () => clearInterval(timer);
   }, [streaming]);
@@ -51,7 +52,7 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
 
   const lines = content.split('\n');
   const preview = lines[0]?.slice(0, 80) + (lines[0] && lines[0].length > 80 ? '...' : '');
-  const duration = streaming ? `${(elapsed / 10).toFixed(1)}s` : `${lines.length} 行`;
+  const duration = streaming ? `${(elapsedMs / 1000).toFixed(1)}s` : `${lines.length} 行`;
   const card = theme.card.thinking;
 
   return (

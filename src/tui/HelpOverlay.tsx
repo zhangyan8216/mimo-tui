@@ -1,6 +1,6 @@
-// src/tui/HelpOverlay.tsx - 帮助界面
+// src/tui/HelpOverlay.tsx - 帮助界面 (可滚动)
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Text, Box, useInput } from 'ink';
 import type { Theme } from './theme.js';
 
@@ -10,122 +10,71 @@ interface HelpOverlayProps {
 }
 
 export const HelpOverlay: React.FC<HelpOverlayProps> = ({ theme, onClose }) => {
+  const [scroll, setScroll] = useState(0);
+  const viewHeight = 28; // visible lines
+
   useInput((_input, key) => {
-    if (key.escape || key.return) onClose();
+    if (key.escape) { onClose(); return; }
+    if (key.upArrow) { setScroll(s => Math.max(0, s - 1)); return; }
+    if (key.downArrow) { setScroll(s => s + 1); return; }
+    if (key.pageUp) { setScroll(s => Math.max(0, s - viewHeight)); return; }
+    if (key.pageDown) { setScroll(s => s + viewHeight); return; }
   });
 
   const K = ({ children }: { children: React.ReactNode }) => (
     <Text color={theme.tone.brand} bold>{children}</Text>
   );
 
+  const lines: React.ReactNode[] = [
+    <Text key="h1" color={theme.tone.accent} bold>通用</Text>,
+    <Text key="g1">  <K>Ctrl+C</K>  取消/退出  <K>Ctrl+K</K>  命令面板  <K>Ctrl+R</K>  会话列表</Text>,
+    <Text key="g2">  <K>Ctrl+N</K>  新建会话  <K>Ctrl+L</K>  清屏  <K>Ctrl+Z</K>  撤销</Text>,
+    <Text key="g3">  <K>Alt+1/2/3</K> 切换模式 (计划/智能体/自动)  <K>F1</K> 帮助</Text>,
+
+    <Text key="h2" color={theme.tone.accent} bold>输入</Text>,
+    <Text key="i1">  <K>Enter</K> 发送  <K>Shift+Enter</K> 换行  <K>Tab</K> 补全  <K>↑↓</K> 历史</Text>,
+    <Text key="i2">  <K>Ctrl+W</K> 删词  <K>Ctrl+U</K> 清行  <K>Ctrl+A/E</K> 行首/行尾</Text>,
+    <Text key="i3">  <K>Ctrl+←/→</K> 词级移动  <K>←/→</K> 字符移动</Text>,
+
+    <Text key="h3" color={theme.tone.accent} bold>审批</Text>,
+    <Text key="a1">  <K>[Y]</K> 批准  <K>[A]</K> 始终允许  <K>[N]</K> 拒绝</Text>,
+
+    <Text key="h4" color={theme.tone.accent} bold>会话命令</Text>,
+    <Text key="s1">  <K>/new</K> 新建  <K>/retry</K> 重试  <K>/undo</K> 撤销  <K>/export</K> 导出</Text>,
+    <Text key="s2">  <K>/mode</K> 模式  <K>/model</K> 模型  <K>/clear</K> 清屏  <K>/compact</K> 压缩</Text>,
+    <Text key="s3">  <K>/search</K> 搜索  <K>/rename</K> 重命名  <K>/history</K> 历史</Text>,
+
+    <Text key="h5" color={theme.tone.accent} bold>工具命令</Text>,
+    <Text key="t1">  <K>/tree</K> 文件树  <K>/project</K> 项目信息  <K>/cost</K> 费用</Text>,
+    <Text key="t2">  <K>/theme</K> 主题  <K>/config</K> 配置  <K>/debug</K> 调试  <K>/health</K> 检查</Text>,
+    <Text key="t3">  <K>/snippet</K> 代码片段  <K>/kb</K> 知识库  <K>/template</K> 模板</Text>,
+
+    <Text key="h6" color={theme.tone.accent} bold>Git 命令</Text>,
+    <Text key="git1">  <K>/git status</K> 状态  <K>/git diff</K> 差异  <K>/git log</K> 日志</Text>,
+    <Text key="git2">  <K>/git commit</K> 提交  <K>/git branch</K> 分支  <K>/git pr</K> PR</Text>,
+    <Text key="git3">  <K>/git blame</K> 逐行  <K>/git compare</K> 对比  <K>/git conflict</K> 冲突</Text>,
+
+    <Text key="h7" color={theme.tone.accent} bold>AI 命令</Text>,
+    <Text key="ai1">  <K>/parallel</K> 并行任务  <K>/pipeline</K> 管道  <K>/explore</K> 探索</Text>,
+    <Text key="ai2">  <K>/review</K> 审查  <K>/sub</K> 后台任务  <K>/status</K> 状态</Text>,
+    <Text key="ai3">  <K>/auto</K> 自动化  <K>/workflow</K> 工作流  <K>/kill</K> 终止</Text>,
+
+    <Text key="h8" color={theme.tone.accent} bold>插件</Text>,
+    <Text key="p1" color={theme.fg.sub}>  放在 .mimo/plugins/ 目录，启动时自动加载</Text>,
+  ];
+
+  const maxScroll = Math.max(0, lines.length - viewHeight);
+  const clampedScroll = Math.min(scroll, maxScroll);
+  const visible = lines.slice(clampedScroll, clampedScroll + viewHeight);
+
   return (
     <Box flexDirection="column" borderStyle="double" borderColor={theme.tone.brand} paddingX={1}>
-      <Text color={theme.tone.brand} bold>❓ 帮助</Text>
-      <Box marginTop={1} flexDirection="column" gap={1}>
-        <Text color={theme.tone.accent} bold>通用</Text>
-        <Text>  <K>Ctrl+C</K>  <Text color={theme.fg.sub}>取消 / 退出</Text></Text>
-        <Text>  <K>Ctrl+K</K>  <Text color={theme.fg.sub}>命令面板</Text></Text>
-        <Text>  <K>Ctrl+R</K>  <Text color={theme.fg.sub}>会话列表</Text></Text>
-        <Text>  <K>Ctrl+N</K>  <Text color={theme.fg.sub}>新建会话</Text></Text>
-        <Text>  <K>Ctrl+L</K>  <Text color={theme.fg.sub}>清屏</Text></Text>
-        <Text>  <K>Ctrl+Z</K>  <Text color={theme.fg.sub}>撤销上一轮</Text></Text>
-        <Text>  <K>Alt+1/2/3</K> <Text color={theme.fg.sub}>切换模式 (计划/智能体/自动)</Text></Text>
-        <Text>  <K>?</K>        <Text color={theme.fg.sub}>帮助</Text></Text>
-
-        <Text color={theme.tone.accent} bold>输入</Text>
-        <Text>  <K>Enter</K>        <Text color={theme.fg.sub}>发送消息</Text></Text>
-        <Text>  <K>Shift+Enter</K>  <Text color={theme.fg.sub}>换行</Text></Text>
-        <Text>  <K>Tab</K>          <Text color={theme.fg.sub}>补全斜杠命令</Text></Text>
-        <Text>  <K>↑/↓</K>          <Text color={theme.fg.sub}>历史记录</Text></Text>
-        <Text>  <K>Ctrl+U</K>       <Text color={theme.fg.sub}>清空当前行</Text></Text>
-        <Text>  <K>Ctrl+A/E</K>     <Text color={theme.fg.sub}>行首/行尾</Text></Text>
-
-        <Text color={theme.tone.accent} bold>审批</Text>
-        <Text>  <K>Y</K>  <Text color={theme.fg.sub}>批准一次</Text>  <K>A</K>  <Text color={theme.fg.sub}>始终批准</Text>  <K>N</K>  <Text color={theme.fg.sub}>拒绝</Text></Text>
-
-        <Text color={theme.tone.accent} bold>斜杠命令</Text>
-        <Text>  <K>/new</K>      <Text color={theme.fg.sub}>新建会话</Text>    <K>/retry</K>    <Text color={theme.fg.sub}>重试上一条</Text></Text>
-        <Text>  <K>/undo</K>     <Text color={theme.fg.sub}>撤销上一轮</Text>  <K>/export</K>   <Text color={theme.fg.sub}>导出对话</Text></Text>
-        <Text>  <K>/mode</K>     <Text color={theme.fg.sub}>切换模式</Text>    <K>/model</K>    <Text color={theme.fg.sub}>切换模型</Text></Text>
-        <Text>  <K>/git</K>      <Text color={theme.fg.sub}>Git 状态</Text>    <K>/tree</K>     <Text color={theme.fg.sub}>文件树</Text></Text>
-        <Text>  <K>/project</K>  <Text color={theme.fg.sub}>项目信息</Text>    <K>/cost</K>     <Text color={theme.fg.sub}>费用统计</Text></Text>
-        <Text>  <K>/theme</K>    <Text color={theme.fg.sub}>切换主题</Text>    <K>/compact</K>  <Text color={theme.fg.sub}>压缩上下文</Text></Text>
-        <Text>  <K>/clear</K>    <Text color={theme.fg.sub}>清屏</Text>        <K>/debug</K>    <Text color={theme.fg.sub}>调试信息</Text></Text>
-        <Text>  <K>/health</K>   <Text color={theme.fg.sub}>API 检查</Text>    <K>/history</K>  <Text color={theme.fg.sub}>命令历史</Text></Text>
-        <Text>  <K>/search</K>   <Text color={theme.fg.sub}>搜索对话</Text>    <K>/tokens</K>   <Text color={theme.fg.sub}>上下文用量</Text></Text>
-        <Text>  <K>/rename</K>   <Text color={theme.fg.sub}>重命名会话</Text>  <K>/config</K>   <Text color={theme.fg.sub}>查看配置</Text></Text>
-        <Text>  <K>/model</K>    <Text color={theme.fg.sub}>切换模型</Text>    <K>/cd</K>      <Text color={theme.fg.sub}>切换目录</Text></Text>
-        <Text>  <K>/bookmark</K> <Text color={theme.fg.sub}>会话书签</Text>    <K>/doctor</K>   <Text color={theme.fg.sub}>全面诊断</Text></Text>
-        <Text>  <K>/fix</K>      <Text color={theme.fg.sub}>自动修复</Text>    <K>/tips</K>    <Text color={theme.fg.sub}>费用优化</Text></Text>
-        <Text>  <K>/sub</K>      <Text color={theme.fg.sub}>后台任务</Text>    <K>/forget</K>   <Text color={theme.fg.sub}>删除记忆</Text></Text>
-        <Text>  <K>/wf</K>       <Text color={theme.fg.sub}>工作流</Text>      <K>/mem</K>      <Text color={theme.fg.sub}>记忆系统</Text></Text>
-        <Text>  <K>/template</K> <Text color={theme.fg.sub}>对话模板</Text>    <K>/snippet</K>  <Text color={theme.fg.sub}>代码片段</Text></Text>
-        <Text>  <K>/stats</K>    <Text color={theme.fg.sub}>会话统计</Text>    <K>/suggest</K>  <Text color={theme.fg.sub}>智能建议</Text></Text>
-        <Text>  <K>/watch</K>    <Text color={theme.fg.sub}>文件监控</Text>    <K>/chain</K>    <Text color={theme.fg.sub}>命令链</Text></Text>
-        <Text>  <K>/think</K>    <Text color={theme.fg.sub}>推理深度</Text>    <K>/context</K>  <Text color={theme.fg.sub}>上下文详情</Text></Text>
-        <Text>  <K>/improve</K>  <Text color={theme.fg.sub}>代码质量分析</Text>  <K>/batch</K>  <Text color={theme.fg.sub}>批量执行命令</Text></Text>
-        <Text>  <K>/parallel</K> <Text color={theme.fg.sub}>并行任务</Text>    <K>/explore</K>  <Text color={theme.fg.sub}>代码探索</Text></Text>
-        <Text>  <K>/review</K>  <Text color={theme.fg.sub}>代码审查</Text>    <K>/status</K>   <Text color={theme.fg.sub}>任务状态</Text></Text>
-        <Text>  <K>/auto</K>    <Text color={theme.fg.sub}>自动化工作流</Text>  <K>/pipeline</K> <Text color={theme.fg.sub}>管道任务</Text></Text>
-        <Text>  <K>/kill</K>    <Text color={theme.fg.sub}>终止所有任务</Text>  <K>/clean</K>    <Text color={theme.fg.sub}>清理数据</Text></Text>
-        <Text>  <K>/metrics</K> <Text color={theme.fg.sub}>会话指标</Text>    <K>/kb</K>       <Text color={theme.fg.sub}>知识库管理</Text></Text>
-        <Text>  <K>/debug agents</K> <Text color={theme.fg.sub}>智能体状态</Text>  <K>/config reset</K> <Text color={theme.fg.sub}>重置配置</Text></Text>
-
-        <Text color={theme.tone.accent} bold>Git 子命令</Text>
-        <Text>  <K>/git pr</K>               <Text color={theme.fg.sub}>生成 PR 标题和描述</Text></Text>
-        <Text>  <K>/git blame &lt;file&gt;</K>     <Text color={theme.fg.sub}>查看文件逐行修改记录</Text></Text>
-        <Text>  <K>/git conflict</K>         <Text color={theme.fg.sub}>帮助解决合并冲突</Text></Text>
-        <Text>  <K>/git compare &lt;branch&gt;</K> <Text color={theme.fg.sub}>对比分支差异</Text></Text>
-        <Text>  <K>/git amend</K>            <Text color={theme.fg.sub}>修改最近一次提交</Text></Text>
-        <Text>  <K>/git tag &lt;name&gt;</K>       <Text color={theme.fg.sub}>创建并推送标签</Text></Text>
-        <Text>  <K>/git clean</K>            <Text color={theme.fg.sub}>清理未跟踪文件</Text></Text>
-
-        <Text color={theme.tone.accent} bold>Git 高级</Text>
-        <Text>  <K>/git bisect &lt;good&gt; &lt;bad&gt;</K> <Text color={theme.fg.sub}>自动排查引入 bug 的提交</Text></Text>
-        <Text>  <K>/git cherry-pick &lt;commit&gt;</K> <Text color={theme.fg.sub}>摘取特定提交</Text></Text>
-        <Text>  <K>/git rebase &lt;branch&gt;</K>    <Text color={theme.fg.sub}>交互式变基</Text></Text>
-        <Text>  <K>/git hook pre-commit</K>    <Text color={theme.fg.sub}>设置 pre-commit 钩子</Text></Text>
-        <Text>  <K>/git undo</K>               <Text color={theme.fg.sub}>撤销上一次提交</Text></Text>
-        <Text>  <K>/git sync</K>               <Text color={theme.fg.sub}>同步远程仓库</Text></Text>
-        <Text>  <K>/git graph</K>              <Text color={theme.fg.sub}>可视化提交图</Text></Text>
-
-        <Text color={theme.tone.accent} bold>Git 工作树 / 暂存</Text>
-        <Text>  <K>/git worktree list</K>          <Text color={theme.fg.sub}>列出所有工作树</Text></Text>
-        <Text>  <K>/git worktree add &lt;branch&gt;</K>  <Text color={theme.fg.sub}>创建新工作树</Text></Text>
-        <Text>  <K>/git worktree remove &lt;name&gt;</K> <Text color={theme.fg.sub}>移除工作树</Text></Text>
-        <Text>  <K>/git stash list</K>             <Text color={theme.fg.sub}>列出所有 stash</Text></Text>
-        <Text>  <K>/git stash apply [n]</K>        <Text color={theme.fg.sub}>应用指定 stash</Text></Text>
-        <Text>  <K>/git stash drop [n]</K>         <Text color={theme.fg.sub}>删除指定 stash</Text></Text>
-
-        <Text color={theme.tone.accent} bold>Git 工具</Text>
-        <Text>  <K>/git search &lt;query&gt;</K>    <Text color={theme.fg.sub}>搜索提交信息</Text></Text>
-        <Text>  <K>/git recent</K>            <Text color={theme.fg.sub}>最近修改的文件</Text></Text>
-        <Text>  <K>/git contributors</K>     <Text color={theme.fg.sub}>贡献者列表</Text></Text>
-        <Text>  <K>/git release &lt;version&gt;</K> <Text color={theme.fg.sub}>创建发布版本 (tag+CHANGELOG)</Text></Text>
-        <Text>  <K>/git wip</K>               <Text color={theme.fg.sub}>快速 WIP 提交</Text></Text>
-
-        <Text color={theme.tone.accent} bold>GitHub 集成</Text>
-        <Text>  <K>/git issue &lt;title&gt;</K>     <Text color={theme.fg.sub}>创建 GitHub Issue</Text></Text>
-        <Text>  <K>/git pr list</K>           <Text color={theme.fg.sub}>列出开放的 PR</Text></Text>
-        <Text>  <K>/git pr view [n]</K>       <Text color={theme.fg.sub}>查看 PR 详情</Text></Text>
-        <Text>  <K>/git pr merge [n]</K>      <Text color={theme.fg.sub}>合并 PR (squash)</Text></Text>
-        <Text>  <K>/git ci</K>                <Text color={theme.fg.sub}>查看 CI 状态</Text></Text>
-        <Text>  <K>/git ci logs</K>           <Text color={theme.fg.sub}>查看最新 CI 日志</Text></Text>
-
-        <Text color={theme.tone.accent} bold>Git 统计</Text>
-        <Text>  <K>/git stats</K>             <Text color={theme.fg.sub}>月度 Git 统计</Text></Text>
-        <Text>  <K>/git authors</K>           <Text color={theme.fg.sub}>所有作者及提交次数</Text></Text>
-        <Text>  <K>/git churn</K>             <Text color={theme.fg.sub}>文件变更频率排名</Text></Text>
-        <Text>  <K>/git timeline &lt;file&gt;</K>   <Text color={theme.fg.sub}>文件提交时间线</Text></Text>
-
-        <Text color={theme.tone.accent} bold>AI 工具</Text>
-        <Text>  <K>code_review</K> <Text color={theme.fg.sub}>代码审查 (diff/file/pr/staged)</Text></Text>
-
-        <Text color={theme.tone.accent} bold>插件</Text>
-        <Text color={theme.fg.sub}>📁 插件放在 .mimo/plugins/ 目录</Text>
+      <Box justifyContent="space-between">
+        <Text color={theme.tone.brand} bold>❓ 帮助</Text>
+        <Text color={theme.fg.meta}>{clampedScroll + 1}/{lines.length} ↑↓滚动 Esc 关闭</Text>
       </Box>
-      <Box marginTop={1}>
-        <Text dimColor color={theme.fg.meta}>按 Esc 或 Enter 关闭...</Text>
+      <Box flexDirection="column" marginTop={0}>
+        {visible}
       </Box>
     </Box>
   );

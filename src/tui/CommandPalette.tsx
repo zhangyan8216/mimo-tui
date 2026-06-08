@@ -1,4 +1,4 @@
-// src/tui/CommandPalette.tsx - Ctrl+K command palette (DeepSeek TUI style)
+// src/tui/CommandPalette.tsx - Ctrl+K command palette (with scroll)
 
 import React, { useState, useMemo } from 'react';
 import { Text, Box, useInput } from 'ink';
@@ -56,75 +56,43 @@ const COMMANDS: Command[] = [
   { id: 'git-sync', label: 'Git Sync', description: '同步远程仓库 (fetch+pull+push)', category: 'Git', action: 'git sync' },
   { id: 'git-graph', label: 'Git Graph', description: '可视化提交图', category: 'Git', action: 'git graph' },
   { id: 'git-worktree-list', label: 'Git Worktree 列表', description: '列出所有工作树', category: 'Git', action: 'git worktree list' },
-  { id: 'git-worktree-add', label: 'Git Worktree 添加', description: '为指定分支创建工作树', category: 'Git', action: 'git worktree add' },
-  { id: 'git-worktree-remove', label: 'Git Worktree 移除', description: '移除指定工作树', category: 'Git', action: 'git worktree remove' },
   { id: 'git-stash-list', label: 'Git Stash 列表', description: '列出所有 stash', category: 'Git', action: 'git stash list' },
-  { id: 'git-stash-apply', label: 'Git Stash 应用', description: '应用指定 stash', category: 'Git', action: 'git stash apply' },
-  { id: 'git-stash-drop', label: 'Git Stash 删除', description: '删除指定 stash', category: 'Git', action: 'git stash drop' },
   { id: 'git-search', label: 'Git 搜索提交', description: '搜索 Git 提交信息', category: 'Git', action: 'git search' },
   { id: 'git-recent', label: 'Git 最近修改', description: '查看最近修改的文件', category: 'Git', action: 'git recent' },
-  { id: 'git-contributors', label: 'Git 贡献者', description: '查看项目贡献者列表', category: 'Git', action: 'git contributors' },
-  { id: 'git-release', label: 'Git 发布版本', description: '创建发布版本 (tag + CHANGELOG)', category: 'Git', action: 'git release' },
-  { id: 'git-wip', label: 'Git WIP 提交', description: '快速 work-in-progress 提交', category: 'Git', action: 'git wip' },
+  { id: 'git-stats', label: 'Git 月度统计', description: '查看月度代码变更统计', category: 'Git', action: 'git stats' },
   { id: 'git-issue', label: '创建 GitHub Issue', description: '创建一个新的 GitHub Issue', category: 'Git', action: 'git issue' },
   { id: 'git-pr-list', label: '列出 PR', description: '列出开放的 Pull Requests', category: 'Git', action: 'git pr list' },
-  { id: 'git-pr-view', label: '查看 PR', description: '查看 PR 详情', category: 'Git', action: 'git pr view' },
-  { id: 'git-pr-merge', label: '合并 PR', description: 'Squash 合并指定 PR', category: 'Git', action: 'git pr merge' },
   { id: 'git-ci', label: 'CI 状态', description: '查看最近 CI 运行状态', category: 'Git', action: 'git ci' },
-  { id: 'git-ci-logs', label: 'CI 日志', description: '查看最新 CI 运行日志', category: 'Git', action: 'git ci logs' },
-  { id: 'git-stats', label: 'Git 月度统计', description: '查看月度代码变更统计', category: 'Git', action: 'git stats' },
-  { id: 'git-authors', label: 'Git 作者统计', description: '查看所有作者及提交次数', category: 'Git', action: 'git authors' },
-  { id: 'git-churn', label: 'Git 文件变更频率', description: '查看最频繁变更的文件', category: 'Git', action: 'git churn' },
-  { id: 'git-timeline', label: 'Git 文件时间线', description: '查看文件的提交历史', category: 'Git', action: 'git timeline' },
   { id: 'tree', label: '文件树', description: '显示项目文件结构', category: '工具', action: 'tree' },
   { id: 'project', label: '项目信息', description: '显示项目类型和配置', category: '工具', action: 'project' },
   { id: 'cost', label: '费用统计', description: '查看 token 用量和费用', category: '工具', action: 'cost' },
   { id: 'tokens', label: '上下文用量', description: '查看上下文窗口使用情况', category: '工具', action: 'tokens' },
-  { id: 'stats', label: '会话统计', description: '显示当前会话统计', category: '工具', action: 'stats' },
-  { id: 'context', label: '上下文详情', description: '查看发送给 API 的上下文', category: '工具', action: 'context' },
-  { id: 'think', label: '推理深度', description: '调整 MiMo 思考深度 (low/medium/high)', category: '工具', action: 'think' },
-  { id: 'config', label: '查看配置', description: '显示当前配置信息', category: '工具', action: 'config' },
   { id: 'theme', label: '切换主题', description: '切换界面主题', category: '工具', action: 'theme' },
-  { id: 'debug', label: '调试信息', description: '显示系统调试信息', category: '工具', action: 'debug' },
-  { id: 'debug-agents', label: '智能体状态', description: '查看子代理、监控、自动化的状态', category: '智能体', action: 'debug agents' },
-  { id: 'metrics', label: '会话指标', description: '查看 Token、费用、工具调用统计', category: '工具', action: 'metrics' },
-  { id: 'config-edit', label: '编辑配置文件', description: '读取并编辑 ~/.mimo/config.toml', category: '工具', action: 'config edit' },
-  { id: 'config-reset', label: '重置配置', description: '恢复配置为默认值', category: '工具', action: 'config reset' },
+  { id: 'config', label: '查看配置', description: '显示当前配置信息', category: '工具', action: 'config' },
   { id: 'health', label: 'API 健康检查', description: '测试 API 连接和延迟', category: '工具', action: 'health' },
   { id: 'doctor', label: '全面诊断', description: '检查配置、API、工具、缓存状态', category: '工具', action: 'doctor' },
-  { id: 'fix', label: '自动修复', description: '运行 lint/format/typecheck 修复', category: '工具', action: 'fix' },
-  { id: 'template', label: '对话模板', description: '预设提示词模板', category: '工具', action: 'template' },
+  { id: 'debug', label: '调试信息', description: '显示系统调试信息', category: '工具', action: 'debug' },
+  { id: 'debug-agents', label: '智能体状态', description: '查看子代理状态', category: '智能体', action: 'debug agents' },
   { id: 'snippet', label: '代码片段', description: '管理代码片段库', category: '工具', action: 'snippet' },
-  { id: 'workflow', label: '工作流', description: '执行多步骤工作流', category: '工具', action: 'workflow' },
+  { id: 'kb', label: '知识库', description: '管理知识库条目', category: '工具', action: 'kb' },
+  { id: 'template', label: '对话模板', description: '预设提示词模板', category: '工具', action: 'template' },
   { id: 'memory', label: '记忆系统', description: '管理持久化记忆', category: '工具', action: 'mem' },
-  { id: 'suggest', label: '智能建议', description: '获取项目改进建议', category: '工具', action: 'suggest' },
-  { id: 'improve', label: '代码质量分析', description: '分析代码质量并给出改进建议', category: '工具', action: 'improve' },
-  { id: 'batch', label: '批量执行', description: '依次执行多条 shell 命令', category: '工具', action: 'batch' },
-  { id: 'sub', label: '后台任务', description: '在后台运行独立子代理', category: '工具', action: 'sub' },
-  { id: 'tips', label: '费用优化', description: '查看费用优化建议', category: '工具', action: 'tips' },
-  { id: 'watch', label: '文件监控', description: '监控文件变更', category: '工具', action: 'watch' },
-  { id: 'cd', label: '切换目录', description: '切换工作目录', category: '工具', action: 'cd' },
-  { id: 'chain', label: '命令链', description: '依次执行多个命令', category: '工具', action: 'chain' },
-  { id: 'shortcuts', label: '快捷键速查', description: '显示所有快捷键', category: '工具', action: 'shortcuts' },
   { id: 'parallel', label: '并行任务', description: '并行执行多个独立任务', category: '智能体', action: 'parallel' },
-  { id: 'pipeline', label: '管道任务', description: '顺序执行多个任务，前一步输出作为后一步输入', category: '智能体', action: 'pipeline' },
-  { id: 'auto', label: '自动化工作流', description: '切换自动提交/自动测试', category: '智能体', action: 'auto' },
+  { id: 'pipeline', label: '管道任务', description: '顺序执行多个任务', category: '智能体', action: 'pipeline' },
   { id: 'explore', label: '代码探索', description: '只读探索项目代码', category: '智能体', action: 'explore' },
   { id: 'review', label: '代码审查', description: '审查代码质量和潜在问题', category: '智能体', action: 'review' },
-  { id: 'taskstatus', label: '任务状态', description: '查看后台任务状态', category: '智能体', action: 'status' },
-  { id: 'kill', label: '终止所有任务', description: '停止所有运行中的智能体和工作流', category: '智能体', action: 'kill' },
-  { id: 'clean-sessions', label: '清理旧会话', description: '删除超过7天的历史会话', category: '会话', action: 'clean sessions' },
-  { id: 'clean-memory', label: '清空记忆', description: '清空所有持久化记忆', category: '会话', action: 'clean memory' },
-  { id: 'help', label: '帮助', description: '键盘快捷键和命令', shortcut: '?', category: '工具', action: 'help' },
-  { id: 'kb', label: '知识库', description: '管理知识库条目 (添加/搜索/查看/删除)', category: '工具', action: 'kb' },
-  { id: 'kb-add', label: '添加知识', description: '向知识库添加新条目', category: '工具', action: 'kb add' },
-  { id: 'kb-search', label: '搜索知识库', description: '在知识库中搜索', category: '工具', action: 'kb search' },
-  { id: 'code-review-diff', label: '审查未提交变更', description: '审查 git diff 中的未提交变更', category: '工具', action: 'review' },
+  { id: 'sub', label: '后台任务', description: '在后台运行独立子代理', category: '智能体', action: 'sub' },
+  { id: 'status', label: '任务状态', description: '查看后台任务状态', category: '智能体', action: 'status' },
+  { id: 'kill', label: '终止所有任务', description: '停止所有运行中的智能体', category: '智能体', action: 'kill' },
+  { id: 'auto', label: '自动化工作流', description: '切换自动提交/自动测试', category: '智能体', action: 'auto' },
+  { id: 'help', label: '帮助', description: '键盘快捷键和命令', shortcut: 'F1', category: '工具', action: 'help' },
 ];
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ theme, currentMode, onSelect, onClose }) => {
   const [query, setQuery] = useState('');
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [scroll, setScroll] = useState(0);
+  const viewHeight = 18;
 
   const filtered = useMemo(() => {
     if (!query) return COMMANDS;
@@ -136,35 +104,44 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ theme, currentMo
     );
   }, [query]);
 
+  const maxScroll = Math.max(0, filtered.length - viewHeight);
+  const clampedScroll = Math.min(scroll, maxScroll);
+
   useInput((input, key) => {
     if (key.escape) { onClose(); return; }
-    if (key.upArrow) { setSelectedIdx(prev => Math.max(0, prev - 1)); return; }
-    if (key.downArrow) { setSelectedIdx(prev => Math.min(filtered.length - 1, prev + 1)); return; }
+    if (key.upArrow) {
+      setSelectedIdx(prev => {
+        const next = Math.max(0, prev - 1);
+        if (next < clampedScroll) setScroll(next);
+        return next;
+      });
+      return;
+    }
+    if (key.downArrow) {
+      setSelectedIdx(prev => {
+        const next = Math.min(filtered.length - 1, prev + 1);
+        if (next >= clampedScroll + viewHeight) setScroll(next - viewHeight + 1);
+        return next;
+      });
+      return;
+    }
     if (key.return && filtered.length > 0) {
       const idx = Math.min(selectedIdx, filtered.length - 1);
       onSelect(filtered[idx].action);
       return;
     }
-    if (key.backspace) { setQuery(prev => prev.slice(0, -1)); setSelectedIdx(0); return; }
-    if (input && !key.ctrl && !key.meta) { setQuery(prev => prev + input); setSelectedIdx(0); }
+    if (key.backspace) { setQuery(prev => prev.slice(0, -1)); setSelectedIdx(0); setScroll(0); return; }
+    if (input && !key.ctrl && !key.meta) { setQuery(prev => prev + input); setSelectedIdx(0); setScroll(0); }
   });
 
-  // Group by category
-  const groups = new Map<string, Command[]>();
-  for (const cmd of filtered) {
-    const existing = groups.get(cmd.category) || [];
-    existing.push(cmd);
-    groups.set(cmd.category, existing);
-  }
-
-  let globalIdx = 0;
+  const visible = filtered.slice(clampedScroll, clampedScroll + viewHeight);
 
   return (
     <Box flexDirection="column" borderStyle="double" borderColor={theme.tone.brand} paddingX={1}>
       {/* Header */}
       <Box justifyContent="space-between">
         <Text color={theme.tone.brand} bold>⌘ 命令面板</Text>
-        <Text color={theme.fg.meta}>{filtered.length} / {COMMANDS.length}</Text>
+        <Text color={theme.fg.meta}>{filtered.length} / {COMMANDS.length} · ↑↓滚动</Text>
       </Box>
 
       {/* Search input */}
@@ -173,29 +150,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ theme, currentMo
         <Text color={query ? theme.fg.body : theme.fg.meta}>{query || '输入以筛选...'}</Text>
       </Box>
 
-      {/* Command list */}
-      <Box flexDirection="column" marginTop={1}>
-        {Array.from(groups.entries()).map(([category, cmds]) => (
-          <Box key={category} flexDirection="column">
-            <Text dimColor color={theme.fg.meta}>{category}</Text>
-            {cmds.map(cmd => {
-              const idx = globalIdx++;
-              const isSelected = idx === selectedIdx;
-              return (
-                <Box key={cmd.id} paddingLeft={1}>
-                  <Text color={isSelected ? theme.tone.brand : theme.fg.body} bold={isSelected}>
-                    {isSelected ? '▸ ' : '  '}
-                    {cmd.label}
-                  </Text>
-                  <Text color={theme.fg.sub}> - {cmd.description}</Text>
-                  {cmd.shortcut && (
-                    <Text color={theme.fg.meta}> [{cmd.shortcut}]</Text>
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
-        ))}
+      {/* Command list — scrollable */}
+      <Box flexDirection="column" marginTop={0}>
+        {clampedScroll > 0 && <Text color={theme.fg.faint}>  ↑ 更多...</Text>}
+        {visible.map((cmd) => {
+          const realIdx = filtered.indexOf(cmd);
+          const isSelected = realIdx === selectedIdx;
+          return (
+            <Box key={cmd.id} paddingLeft={1}>
+              <Text color={isSelected ? theme.tone.brand : theme.fg.body} bold={isSelected}>
+                {isSelected ? '▸ ' : '  '}
+                {cmd.label}
+              </Text>
+              <Text color={theme.fg.sub}> - {cmd.description}</Text>
+              {cmd.shortcut && (
+                <Text color={theme.fg.meta}> [{cmd.shortcut}]</Text>
+              )}
+            </Box>
+          );
+        })}
+        {clampedScroll + viewHeight < filtered.length && <Text color={theme.fg.faint}>  ↓ 更多...</Text>}
         {filtered.length === 0 && (
           <Text dimColor color={theme.fg.meta}>没有匹配的命令</Text>
         )}

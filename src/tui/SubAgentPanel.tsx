@@ -1,6 +1,6 @@
 // src/tui/SubAgentPanel.tsx - Real-time sub-agent progress display
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Text, Box } from 'ink';
 import type { Theme } from './theme.js';
 import type { SubAgentTask } from '../agent/sub-agent.js';
@@ -11,6 +11,16 @@ interface SubAgentPanelProps {
 }
 
 export const SubAgentPanel: React.FC<SubAgentPanelProps> = ({ tasks, theme }) => {
+  const [, setTick] = useState(0);
+
+  // Re-render every second when there are running tasks
+  const hasRunning = tasks.some(t => t.status === 'running' || t.status === 'queued');
+  useEffect(() => {
+    if (!hasRunning) return;
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [hasRunning]);
+
   if (tasks.length === 0) return null;
 
   const running = tasks.filter(t => t.status === 'running');
