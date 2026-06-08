@@ -4,9 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { Skill, MCPServerConfig } from '../api/types.js';
+import { getMimoPath } from '../utils/paths.js';
 
 const SKILLS_DIR = path.join(process.cwd(), '.mimo', 'skills');
-const GLOBAL_SKILLS_DIR = path.join(os.homedir(), '.mimo', 'skills');
+function getGlobalSkillsDir(): string {
+  return getMimoPath('skills');
+}
 
 // ─── Skill Installation ─────────────────────────────────────────────
 
@@ -65,7 +68,7 @@ export async function installSkill(source: string): Promise<SkillInstallResult> 
 export function uninstallSkill(name: string): { removed: boolean; path?: string } {
   const candidates = [
     path.join(SKILLS_DIR, `${name}.md`),
-    path.join(GLOBAL_SKILLS_DIR, `${name}.md`),
+    path.join(getGlobalSkillsDir(), `${name}.md`),
   ];
 
   for (const p of candidates) {
@@ -82,7 +85,7 @@ export function uninstallSkill(name: string): { removed: boolean; path?: string 
  */
 export function listInstalledSkills(): Skill[] {
   const skills: Skill[] = [];
-  for (const dir of [SKILLS_DIR, GLOBAL_SKILLS_DIR]) {
+  for (const dir of [SKILLS_DIR, getGlobalSkillsDir()]) {
     if (!fs.existsSync(dir)) continue;
     for (const file of fs.readdirSync(dir)) {
       if (!file.endsWith('.md')) continue;
@@ -174,7 +177,7 @@ function extractField(meta: string, field: string): string | null {
 
 async function fetchSkillFromUrl(url: string): Promise<string> {
   const response = await fetch(url, {
-    headers: { 'User-Agent': 'mimo-tui/1.0' },
+    headers: { 'User-Agent': 'mimo-ai-cli/1.3.1' },
     signal: AbortSignal.timeout(15000),
   });
   if (!response.ok) {

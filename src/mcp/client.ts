@@ -101,7 +101,7 @@ export class MCPClient {
           await this.sendRequest(server, 'initialize', {
             protocolVersion: '2024-11-05',
             capabilities: {},
-            clientInfo: { name: 'mimo-tui', version: '1.0.0' },
+            clientInfo: { name: 'mimo-ai-cli', version: '1.3.1' },
           });
 
           // Discover tools

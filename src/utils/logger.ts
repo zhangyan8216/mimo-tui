@@ -2,37 +2,42 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getMimoPath } from './paths.js';
 
-const LOG_DIR = path.join(os.homedir(), '.mimo', 'logs');
 const MAX_LOG_FILES = 10;
 let logStream: fs.WriteStream | null = null;
 let debugEnabled = false;
+
+function getLogDir(): string {
+  return getMimoPath('logs');
+}
 
 export function initLogger(debug: boolean): void {
   debugEnabled = debug;
 
   // Always create log directory for rotation cleanup
-  fs.mkdirSync(LOG_DIR, { recursive: true });
+  const logDir = getLogDir();
+  fs.mkdirSync(logDir, { recursive: true });
   rotateLogs();
 
   if (debug) {
-    const logFile = path.join(LOG_DIR, `mimo-${Date.now()}.log`);
+    const logFile = path.join(logDir, `mimo-${Date.now()}.log`);
     logStream = fs.createWriteStream(logFile, { flags: 'a' });
   }
 }
 
 /** Keep only the most recent N log files */
 function rotateLogs(): void {
+  const logDir = getLogDir();
   try {
-    const files = fs.readdirSync(LOG_DIR)
+    const files = fs.readdirSync(logDir)
       .filter(f => f.startsWith('mimo-') && f.endsWith('.log'))
-      .map(f => ({ name: f, time: fs.statSync(path.join(LOG_DIR, f)).mtimeMs }))
+      .map(f => ({ name: f, time: fs.statSync(path.join(logDir, f)).mtimeMs }))
       .sort((a, b) => b.time - a.time);
 
     // Remove old files beyond MAX_LOG_FILES
     for (const file of files.slice(MAX_LOG_FILES)) {
-      try { fs.unlinkSync(path.join(LOG_DIR, file.name)); } catch { /* ignore */ }
+      try { fs.unlinkSync(path.join(logDir, file.name)); } catch { /* ignore */ }
     }
   } catch { /* ignore rotation errors */ }
 }

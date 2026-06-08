@@ -9,6 +9,7 @@ import { MessageBubble } from './MessageBubble.js';
 interface ChatViewProps {
   messages: Message[];
   theme: Theme;
+  version?: string;
   streamingContent?: string;
   streamingThinking?: string;
   streamingToolCalls?: Map<number, { name: string; args: string }>;
@@ -18,7 +19,7 @@ interface ChatViewProps {
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
-  messages, theme, streamingContent, streamingThinking, streamingToolCalls, isStreaming, isThinking, toolResults,
+  messages, theme, version = '1.3.1', streamingContent, streamingThinking, streamingToolCalls, isStreaming, isThinking, toolResults,
 }) => {
   // 欢迎界面
   if (messages.length === 0 && !isStreaming) {
@@ -26,7 +27,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
         <Box marginBottom={1}>
           <Text color={theme.tone.brand} bold>  🐱  Mimo TUI  </Text>
-          <Text color={theme.fg.sub}>v1.3.0</Text>
+          <Text color={theme.fg.sub}>v{version}</Text>
         </Box>
         <Box marginBottom={2}>
           <Text color={theme.fg.sub}>终端 AI 编程助手</Text>

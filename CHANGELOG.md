@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3.1 (2026-06-08)
+
+### Release hardening
+
+- Unified public package naming around `mimo-ai-cli` while keeping the `mimo` binary.
+- Updated docs for Node.js 20+, 17 built-in tools, `Ctrl+/` help, and `MIMO_HOME`.
+- Fixed release artifact matching for `mimo-ai-cli-*.tgz` and made `npm publish` fail loudly when credentials or publishing fail.
+- Added `MIMO_HOME` support for user data isolation without changing the default `~/.mimo` location.
+- Isolated history and MCP config tests from real user directories.
+- Made shell platform-selection tests deterministic across Windows, Linux, and macOS.
+- Refreshed package metadata for the v1.3.1 patch release.
+
 ## v1.3.0 (2025-06-08)
 
 ### 🚀 New Features — Skill & MCP Installation

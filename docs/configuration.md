@@ -99,6 +99,7 @@ Environment variables override config file values:
 | `MIMO_BASE_URL` | `provider.base_url` |
 | `MIMO_MODEL` | `provider.model` |
 | `MIMO_PROVIDER_TYPE` | `provider.provider_type` |
+| `MIMO_HOME` | User data directory. Defaults to `~/.mimo` |
 
 ## Setup Wizard
 

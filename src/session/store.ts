@@ -1,20 +1,16 @@
 // src/session/store.ts - SQLite-based session persistence
 
 import Database from 'better-sqlite3';
-import path from 'path';
 import fs from 'fs';
-import os from 'os';
 import type { Session, Message, TokenUsage, AgentMode } from '../api/types.js';
-
-const DB_DIR = path.join(os.homedir(), '.mimo');
-const DB_PATH = path.join(DB_DIR, 'sessions.db');
+import { getMimoHome, getMimoPath } from '../utils/paths.js';
 
 export class SessionStore {
   private db: Database.Database;
 
   constructor() {
-    fs.mkdirSync(DB_DIR, { recursive: true });
-    this.db = new Database(DB_PATH);
+    fs.mkdirSync(getMimoHome(), { recursive: true });
+    this.db = new Database(getMimoPath('sessions.db'));
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.init();

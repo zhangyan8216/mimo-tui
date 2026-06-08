@@ -1,10 +1,12 @@
-// src/utils/memory.ts - AI 记忆系统（跨会话记忆用户偏好）
+// src/utils/memory.ts - Persistent AI memory across sessions.
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getMimoPath } from './paths.js';
 
-const MEMORY_FILE = path.join(os.homedir(), '.mimo', 'memory.json');
+function getMemoryFile(): string {
+  return getMimoPath('memory.json');
+}
 
 export interface Memory {
   key: string;
@@ -23,7 +25,6 @@ export class MemoryStore {
     this.load();
   }
 
-  /** 延迟保存 — 避免频繁磁盘写入 */
   private scheduleSave(): void {
     if (!this.saveQueued) {
       this.saveQueued = true;
@@ -31,7 +32,6 @@ export class MemoryStore {
     }
   }
 
-  /** 记住一条信息 */
   remember(key: string, value: string, category: Memory['category'] = 'fact'): void {
     const existing = this.memories.find(m => m.key === key);
     if (existing) {
@@ -50,18 +50,14 @@ export class MemoryStore {
     this.save();
   }
 
-  /** 回忆一条信息 */
   recall(key: string): string | null {
     const mem = this.memories.find(m => m.key === key);
-    if (mem) {
-      mem.accessCount++;
-      this.scheduleSave(); // 延迟保存，避免频繁磁盘 I/O
-      return mem.value;
-    }
-    return null;
+    if (!mem) return null;
+    mem.accessCount++;
+    this.scheduleSave();
+    return mem.value;
   }
 
-  /** 搜索记忆 */
   search(query: string): Memory[] {
     const lower = query.toLowerCase();
     return this.memories.filter(m =>
@@ -70,7 +66,6 @@ export class MemoryStore {
     );
   }
 
-  /** 获取所有记忆，按类别分组 */
   getByCategory(): Map<string, Memory[]> {
     const map = new Map<string, Memory[]>();
     for (const m of this.memories) {
@@ -81,7 +76,6 @@ export class MemoryStore {
     return map;
   }
 
-  /** 删除记忆 */
   forget(key: string): boolean {
     const idx = this.memories.findIndex(m => m.key === key);
     if (idx === -1) return false;
@@ -90,10 +84,9 @@ export class MemoryStore {
     return true;
   }
 
-  /** 获取所有记忆摘要（注入到系统提示词） */
   getContextSummary(): string {
     if (this.memories.length === 0) return '';
-    const lines = ['## 用户记忆\n'];
+    const lines = ['## User Memory\n'];
     for (const m of this.memories) {
       lines.push(`- [${m.category}] ${m.key}: ${m.value}`);
     }
@@ -104,25 +97,26 @@ export class MemoryStore {
     return [...this.memories];
   }
 
-  /** 清空所有记忆 */
   clear(): void {
     this.memories = [];
     this.save();
   }
 
   private load(): void {
+    const memoryFile = getMemoryFile();
     try {
-      if (fs.existsSync(MEMORY_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8'));
+      if (fs.existsSync(memoryFile)) {
+        const parsed = JSON.parse(fs.readFileSync(memoryFile, 'utf-8'));
         this.memories = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* corrupted file — keep empty */ }
+    } catch { /* corrupted file: keep empty */ }
   }
 
   private save(): void {
+    const memoryFile = getMemoryFile();
     try {
-      fs.mkdirSync(path.dirname(MEMORY_FILE), { recursive: true });
-      fs.writeFileSync(MEMORY_FILE, JSON.stringify(this.memories, null, 2), 'utf-8');
+      fs.mkdirSync(path.dirname(memoryFile), { recursive: true });
+      fs.writeFileSync(memoryFile, JSON.stringify(this.memories, null, 2), 'utf-8');
     } catch { /* ignore */ }
   }
 }

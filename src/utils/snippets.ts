@@ -1,10 +1,12 @@
-// src/utils/snippets.ts - 代码片段库
+// src/utils/snippets.ts - Persistent code snippet library.
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getMimoPath } from './paths.js';
 
-const SNIPPETS_FILE = path.join(os.homedir(), '.mimo', 'snippets.json');
+function getSnippetsFile(): string {
+  return getMimoPath('snippets.json');
+}
 
 export interface Snippet {
   id: string;
@@ -62,18 +64,20 @@ export class SnippetLibrary {
   }
 
   private load(): void {
+    const snippetsFile = getSnippetsFile();
     try {
-      if (fs.existsSync(SNIPPETS_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(SNIPPETS_FILE, 'utf-8'));
+      if (fs.existsSync(snippetsFile)) {
+        const parsed = JSON.parse(fs.readFileSync(snippetsFile, 'utf-8'));
         this.snippets = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* corrupted file — keep empty, next save will overwrite */ }
+    } catch { /* corrupted file: keep empty */ }
   }
 
   private save(): void {
+    const snippetsFile = getSnippetsFile();
     try {
-      fs.mkdirSync(path.dirname(SNIPPETS_FILE), { recursive: true });
-      fs.writeFileSync(SNIPPETS_FILE, JSON.stringify(this.snippets, null, 2), 'utf-8');
+      fs.mkdirSync(path.dirname(snippetsFile), { recursive: true });
+      fs.writeFileSync(snippetsFile, JSON.stringify(this.snippets, null, 2), 'utf-8');
     } catch { /* ignore */ }
   }
 }

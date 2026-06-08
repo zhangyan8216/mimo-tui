@@ -2,10 +2,13 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getMimoPath } from './paths.js';
 
-const HISTORY_FILE = path.join(os.homedir(), '.mimo', 'history.json');
 const MAX_HISTORY = 200;
+
+function getHistoryFile(): string {
+  return getMimoPath('history.json');
+}
 
 export class CommandHistory {
   private history: string[] = [];
@@ -52,9 +55,10 @@ export class CommandHistory {
   }
 
   private load(): void {
+    const historyFile = getHistoryFile();
     try {
-      if (fs.existsSync(HISTORY_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+      if (fs.existsSync(historyFile)) {
+        const parsed = JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
         this.history = Array.isArray(parsed) ? parsed : [];
         this.index = this.history.length;
       }
@@ -62,9 +66,10 @@ export class CommandHistory {
   }
 
   private save(): void {
+    const historyFile = getHistoryFile();
     try {
-      fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true });
-      fs.writeFileSync(HISTORY_FILE, JSON.stringify(this.history), 'utf-8');
+      fs.mkdirSync(path.dirname(historyFile), { recursive: true });
+      fs.writeFileSync(historyFile, JSON.stringify(this.history), 'utf-8');
     } catch { /* ignore */ }
   }
 }

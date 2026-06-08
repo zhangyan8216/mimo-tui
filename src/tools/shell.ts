@@ -4,6 +4,16 @@ import { spawn } from 'child_process';
 import os from 'os';
 import type { Tool, ToolContext } from './registry.js';
 
+export function getShellInvocation(command: string, platform = os.platform()): { shell: string; args: string[] } {
+  const isWindows = platform === 'win32';
+  return {
+    shell: isWindows ? 'powershell' : 'bash',
+    args: isWindows
+      ? ['-NoProfile', '-NonInteractive', '-Command', `try { ${command}; if ($LASTEXITCODE) { exit $LASTEXITCODE } } catch { Write-Error $_; exit 1 }`]
+      : ['-c', command],
+  };
+}
+
 export const shellTool: Tool = {
   name: 'shell',
   description: '执行 shell 命令，返回 stdout 和 stderr。用于运行测试、构建、git 操作、安装依赖等。Windows 自动使用 PowerShell。',
@@ -25,13 +35,9 @@ export const shellTool: Tool = {
   async execute(args: Record<string, unknown>, ctx: ToolContext): Promise<string> {
     const command = String(args.command);
     const timeout = Math.min(Number(args.timeout) || 60000, 300000); // Max 5 minutes
-    const isWindows = os.platform() === 'win32';
 
     return new Promise((resolve, reject) => {
-      const shell = isWindows ? 'powershell' : 'bash';
-      const shellArgs = isWindows
-        ? ['-NoProfile', '-NonInteractive', '-Command', `try { ${command}; if ($LASTEXITCODE) { exit $LASTEXITCODE } } catch { Write-Error $_; exit 1 }`]
-        : ['-c', command];
+      const { shell, args: shellArgs } = getShellInvocation(command);
 
       const proc = spawn(shell, shellArgs, {
         cwd: ctx.cwd,

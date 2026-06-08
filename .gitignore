@@ -6,3 +6,5 @@ Thumbs.db
 .mimo/
 *.db
 mimo-tui-*.tgz
+mimo-ai-cli-*.tgz
+.npm-pack-cache/

@@ -53,7 +53,7 @@ describe('web_fetch tool', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://example.com',
       expect.objectContaining({
-        headers: { 'User-Agent': 'mimo-tui/1.0' },
+        headers: { 'User-Agent': 'mimo-ai-cli/1.3.1' },
       }),
     );
   });

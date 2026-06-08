@@ -2,7 +2,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { saveConfig, DEFAULT_CONFIG, type Config } from '../config.js';
+import { saveConfig, DEFAULT_CONFIG, getConfigDir, type Config } from '../config.js';
 import { createProvider } from '../api/providers/index.js';
 import { compactContext } from '../agent/compact.js';
 import { Sandbox } from '../utils/sandbox.js';
@@ -18,6 +18,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
   const { setMessages, configRef, modeRef, setConfig, usage, handleSubmit, sandbox, toolRegistry, sessionManager,
     memoryStore, snippetLibrary, commandHistory, fileWatcher, autoCommit, autoTest, activeWorkflow,
     knowledgeBase, setFileChanges, setIsStreaming, setIsThinking, streamTimerRef, subAgentManager } = ctx;
+  const configPath = path.join(getConfigDir(), 'config.toml');
 
   switch (cmd) {
     case 'compact': {
@@ -339,7 +340,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
     case 'cfg': {
       const cfgSub = cmdArgs[0];
       if (cfgSub === 'edit') {
-        handleSubmit('请用 read_file 读取 ~/.mimo/config.toml 的内容，然后展示给用户。告诉用户可以直接修改配置文件。');
+        handleSubmit(`请用 read_file 读取 ${configPath} 的内容，然后展示给用户。告诉用户可以直接修改配置文件。`);
         break;
       }
       if (cfgSub === 'reset') {
@@ -376,7 +377,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
         `  显示思考: ${cfg.ui.showThinking ? '是' : '否'}`,
         `  显示 Token: ${cfg.ui.showTokens ? '是' : '否'}`,
         ``,
-        `配置文件: \`~/.mimo/config.toml\``,
+        `配置文件: \`${configPath}\``,
         ``,
         `**子命令**: \`/config edit\` 编辑配置 · \`/config reset\` 重置为默认`,
       ].join('\n');
@@ -703,7 +704,7 @@ export function handleToolsCommand(cmd: string, cmdArgs: string[], ctx: CommandC
                     });
                   }
                 }
-                setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${serverConfig.name}** 已安装并连接!\n- 命令: \`${serverConfig.command} ${(serverConfig.args || []).join(' ')}\`\n- 已发现 ${defs.length} 个工具\n- 配置已保存到 ~/.mimo/config.toml` }]);
+                setMessages(prev => [...prev, { role: 'assistant', content: `✅ MCP 服务器 **${serverConfig.name}** 已安装并连接!\n- 命令: \`${serverConfig.command} ${(serverConfig.args || []).join(' ')}\`\n- 已发现 ${defs.length} 个工具\n- 配置已保存到 ${configPath}` }]);
               } catch (err) {
                 setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ MCP 服务器已保存到配置，但连接失败: ${err instanceof Error ? err.message : String(err)}\n重启后会自动重试。` }]);
               }

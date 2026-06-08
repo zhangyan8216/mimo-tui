@@ -9,12 +9,18 @@ const { parseMcpInstallArgs, installSkill, uninstallSkill, listInstalledSkills }
 
 const tmpDir = path.join(os.tmpdir(), `mimo-test-install-${Date.now()}`);
 const skillsDir = path.join(tmpDir, '.mimo', 'skills');
+const mimoHome = path.join(tmpDir, 'home');
+const originalMimoHome = process.env.MIMO_HOME;
 
 beforeEach(() => {
+  process.env.MIMO_HOME = mimoHome;
   fs.mkdirSync(skillsDir, { recursive: true });
+  fs.mkdirSync(mimoHome, { recursive: true });
 });
 
 afterEach(() => {
+  if (originalMimoHome === undefined) delete process.env.MIMO_HOME;
+  else process.env.MIMO_HOME = originalMimoHome;
   try { fs.rmSync(tmpDir, { recursive: true }); } catch { /* ignore */ }
 });
 
@@ -87,16 +93,17 @@ describe('MCP config persistence', () => {
   it('addMcpServer creates correct config', async () => {
     const { addMcpServer, DEFAULT_CONFIG } = await import('../../config.js');
     const server = { name: 'test', transport: 'stdio' as const, command: 'node', args: ['server.js'] };
-    const config = addMcpServer(DEFAULT_CONFIG, server);
+    const config = addMcpServer({ ...DEFAULT_CONFIG, mcp: { servers: [] } }, server);
     expect(config.mcp.servers).toHaveLength(1);
     expect(config.mcp.servers[0].name).toBe('test');
+    expect(fs.existsSync(path.join(mimoHome, 'config.toml'))).toBe(true);
   });
 
   it('addMcpServer replaces existing server with same name', async () => {
     const { addMcpServer, DEFAULT_CONFIG } = await import('../../config.js');
     const server1 = { name: 'test', transport: 'stdio' as const, command: 'node', args: ['v1.js'] };
     const server2 = { name: 'test', transport: 'stdio' as const, command: 'node', args: ['v2.js'] };
-    let config = addMcpServer(DEFAULT_CONFIG, server1);
+    let config = addMcpServer({ ...DEFAULT_CONFIG, mcp: { servers: [] } }, server1);
     config = addMcpServer(config, server2);
     expect(config.mcp.servers).toHaveLength(1);
     expect(config.mcp.servers[0].args).toEqual(['v2.js']);
@@ -106,7 +113,7 @@ describe('MCP config persistence', () => {
     const { addMcpServer, removeMcpServer, DEFAULT_CONFIG } = await import('../../config.js');
     const s1 = { name: 'a', transport: 'stdio' as const, command: 'node' };
     const s2 = { name: 'b', transport: 'stdio' as const, command: 'node' };
-    let config = addMcpServer(DEFAULT_CONFIG, s1);
+    let config = addMcpServer({ ...DEFAULT_CONFIG, mcp: { servers: [] } }, s1);
     config = addMcpServer(config, s2);
     expect(config.mcp.servers).toHaveLength(2);
     config = removeMcpServer(config, 'a');

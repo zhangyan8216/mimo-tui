@@ -1,8 +1,16 @@
+// src/utils/knowledge-base.ts - Persistent user knowledge entries.
+
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getMimoPath } from './paths.js';
 
-const KB_DIR = path.join(os.homedir(), '.mimo', 'knowledge');
+function getKnowledgeDir(): string {
+  return getMimoPath('knowledge');
+}
+
+function getKnowledgeFile(): string {
+  return path.join(getKnowledgeDir(), 'entries.json');
+}
 
 export interface KnowledgeEntry {
   id: string;
@@ -21,7 +29,6 @@ export class KnowledgeBase {
     this.load();
   }
 
-  /** Add a knowledge entry */
   add(title: string, content: string, tags: string[] = [], source: KnowledgeEntry['source'] = 'user'): KnowledgeEntry {
     const entry: KnowledgeEntry = {
       id: `kb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -37,7 +44,6 @@ export class KnowledgeBase {
     return entry;
   }
 
-  /** Search knowledge base */
   search(query: string): KnowledgeEntry[] {
     const lower = query.toLowerCase();
     return this.entries.filter(e =>
@@ -47,17 +53,14 @@ export class KnowledgeBase {
     ).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
   }
 
-  /** Get all entries */
   list(): KnowledgeEntry[] {
     return [...this.entries].sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
   }
 
-  /** Get entry by ID */
   get(id: string): KnowledgeEntry | undefined {
     return this.entries.find(e => e.id === id);
   }
 
-  /** Delete entry */
   delete(id: string): boolean {
     const idx = this.entries.findIndex(e => e.id === id);
     if (idx === -1) return false;
@@ -66,10 +69,9 @@ export class KnowledgeBase {
     return true;
   }
 
-  /** Get context summary for system prompt */
   getContextSummary(): string {
     if (this.entries.length === 0) return '';
-    const lines = ['## 知识库\n'];
+    const lines = ['## Knowledge Base\n'];
     for (const e of this.entries.slice(-20)) {
       lines.push(`- [${e.tags.join(',')}] ${e.title}: ${e.content.slice(0, 100)}`);
     }
@@ -77,19 +79,20 @@ export class KnowledgeBase {
   }
 
   private load(): void {
+    const knowledgeFile = getKnowledgeFile();
     try {
-      const kbFile = path.join(KB_DIR, 'entries.json');
-      if (fs.existsSync(kbFile)) {
-        const parsed = JSON.parse(fs.readFileSync(kbFile, 'utf-8'));
+      if (fs.existsSync(knowledgeFile)) {
+        const parsed = JSON.parse(fs.readFileSync(knowledgeFile, 'utf-8'));
         this.entries = Array.isArray(parsed) ? parsed : [];
       }
-    } catch { /* corrupted file — keep empty, next save will overwrite */ }
+    } catch { /* corrupted file: keep empty */ }
   }
 
   private save(): void {
+    const knowledgeDir = getKnowledgeDir();
     try {
-      fs.mkdirSync(KB_DIR, { recursive: true });
-      fs.writeFileSync(path.join(KB_DIR, 'entries.json'), JSON.stringify(this.entries, null, 2), 'utf-8');
+      fs.mkdirSync(knowledgeDir, { recursive: true });
+      fs.writeFileSync(getKnowledgeFile(), JSON.stringify(this.entries, null, 2), 'utf-8');
     } catch { /* ignore */ }
   }
 }

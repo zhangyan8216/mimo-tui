@@ -165,6 +165,56 @@ Run tests with coverage and report results. Auto-detects the coverage tool for t
 
 **Requires approval:** Yes
 
+## database
+
+Inspect and query SQLite databases within the workspace sandbox.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | yes | `query`, `tables`, `schema`, or `export` |
+| `db_path` | string | yes | Database file path |
+| `sql` | string | no | SQL query for `query` |
+| `table` | string | no | Table name for `schema` or `export` |
+| `format` | string | no | Export format: `csv`, `json`, or `table` |
+
+**Requires approval:** Yes
+
+## code_review
+
+Review git diffs, staged changes, files, or pull request diffs for common correctness, security, performance, and style issues.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | yes | `diff`, `file`, `pr`, or `staged` |
+| `target` | string | no | File path or PR number for `file` and `pr` |
+| `focus` | string | no | Review focus: `bugs`, `security`, `performance`, `style`, or `all` |
+
+**Requires approval:** No
+
+## benchmark
+
+Run lightweight local performance checks for API, file I/O, and command execution paths.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `action` | string | yes | `api`, `file-io`, `command`, or `all` |
+| `iterations` | number | no | Number of iterations. Defaults to 5 |
+
+**Requires approval:** No
+
+## multi_agent
+
+Run multiple sub-agent tasks in parallel, as a race, or with consensus aggregation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `tasks` | array | yes | Array of `{name, prompt, mode}` task objects |
+| `strategy` | string | yes | `parallel`, `race`, or `consensus` |
+| `aggregatePrompt` | string | no | Optional aggregation prompt for consensus-style outputs |
+| `consensusRuns` | number | no | Number of consensus runs |
+
+**Requires approval:** No
+
 ## Common Patterns
 
 ### Read then edit

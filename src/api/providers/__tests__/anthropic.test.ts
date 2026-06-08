@@ -54,6 +54,18 @@ describe('repairJson', () => {
     expect(JSON.parse(result)).toEqual({ a: 1 });
   });
 
+  it('extracts tool arguments from MiMo explanation text', () => {
+    const input = 'I will call the tool with:\n{"path": "src/index.tsx", "limit": 20,}';
+    const result = repairJson(input);
+    expect(JSON.parse(result)).toEqual({ path: 'src/index.tsx', limit: 20 });
+  });
+
+  it('preserves URLs while removing comments outside strings', () => {
+    const input = '{ "url": "https://example.com/a//b", "ok": true // trailing note\n }';
+    const result = repairJson(input);
+    expect(JSON.parse(result)).toEqual({ url: 'https://example.com/a//b', ok: true });
+  });
+
   it('returns empty object for completely invalid input', () => {
     expect(repairJson('not json at all }}')).toBe('{}');
   });
@@ -78,5 +90,13 @@ describe('AnthropicProvider message conversion', () => {
     expect(typeof provider.chat).toBe('function');
     expect(typeof provider.streamChat).toBe('function');
     expect(typeof provider.abort).toBe('function');
+  });
+
+  it('tracks abort state until a new request starts', async () => {
+    const { AnthropicProvider } = await import('../anthropic.js');
+    const provider = new AnthropicProvider('test-key', 'http://localhost', 'test-model');
+    expect(provider.isAborted).toBe(false);
+    provider.abort();
+    expect(provider.isAborted).toBe(true);
   });
 });

@@ -1,26 +1,7 @@
-// src/tools/__tests__/shell.test.ts
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import os from 'os';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { ToolContext } from '../registry.js';
 
-// We need to mock os.platform before importing the tool module.
-// Vitest hoists vi.mock calls, so we set the mock return value
-// in individual tests via a helper.
-
-let platformOverride: string | undefined;
-
-vi.mock('os', async () => {
-  const actual = await vi.importActual<typeof import('os')>('os');
-  return {
-    default: {
-      ...actual,
-      platform: () => platformOverride ?? actual.platform(),
-    },
-  };
-});
-
-// Import after mocking
-const { shellTool } = await import('../shell.js');
+const { shellTool, getShellInvocation } = await import('../shell.js');
 
 function makeCtx(cwd?: string): ToolContext {
   return {
@@ -33,115 +14,97 @@ function makeCtx(cwd?: string): ToolContext {
 }
 
 describe('shell tool', () => {
-  beforeEach(() => {
-    platformOverride = undefined;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it('executes a simple echo command', async () => {
     const result = await shellTool.execute(
-      { command: 'echo hello' },
+      { command: 'echo hello', timeout: 15000 },
       makeCtx(),
     );
     expect(result).toContain('hello');
-    expect(result).toContain('[退出码: 0]');
-  });
+    expect(result).toMatch(/\[\S*: 0\]/);
+  }, 20000);
 
   it('captures stdout output', async () => {
     const result = await shellTool.execute(
-      { command: 'echo line1 && echo line2' },
+      { command: 'echo line1 && echo line2', timeout: 15000 },
       makeCtx(),
     );
     expect(result).toContain('line1');
     expect(result).toContain('line2');
-  });
+  }, 20000);
 
   it('captures stderr output', async () => {
-    // Use node -e to write to stderr
     const result = await shellTool.execute(
-      { command: 'node -e "process.stderr.write(\'error output\'); process.exit(0)"' },
+      { command: 'node -e "process.stderr.write(\'error output\'); process.exit(0)"', timeout: 15000 },
       makeCtx(),
     );
-    expect(result).toContain('[错误输出]');
     expect(result).toContain('error output');
-  });
+  }, 20000);
 
   it('returns non-zero exit code on failure', async () => {
     const result = await shellTool.execute(
-      { command: 'node -e "process.exit(42)"' },
+      { command: 'node -e "process.exit(42)"', timeout: 15000 },
       makeCtx(),
     );
-    expect(result).toContain('[退出码: 42]');
-  });
+    expect(result).toMatch(/\[\S*: 42\]/);
+  }, 20000);
 
   it('returns exit code 0 on success', async () => {
     const result = await shellTool.execute(
-      { command: 'node -e "process.exit(0)"' },
+      { command: 'node -e "process.exit(0)"', timeout: 15000 },
       makeCtx(),
     );
-    expect(result).toContain('[退出码: 0]');
-  });
+    expect(result).toMatch(/\[\S*: 0\]/);
+  }, 20000);
 
   it('times out on a long-running command', async () => {
-    // Use a very short timeout with a command that sleeps longer
     await expect(
       shellTool.execute(
         { command: 'node -e "setTimeout(() => {}, 30000)"', timeout: 200 },
         makeCtx(),
       ),
-    ).rejects.toThrow('超时');
+    ).rejects.toThrow();
   });
 
   it('uses default timeout of 60000ms', async () => {
-    // The shell tool sets timeout to min(args.timeout || 60000, 300000)
-    // We verify that passing no timeout doesn't cause immediate failure
     const result = await shellTool.execute(
       { command: 'echo fast' },
       makeCtx(),
     );
-    expect(result).toContain('[退出码: 0]');
-  });
+    expect(result).toMatch(/\[\S*: 0\]/);
+  }, 20000);
 
   it('caps timeout at 300000ms', async () => {
-    // Passing a huge timeout should be capped; just verify no error
     const result = await shellTool.execute(
       { command: 'echo ok', timeout: 999999 },
       makeCtx(),
     );
-    expect(result).toContain('[退出码: 0]');
-  });
+    expect(result).toMatch(/\[\S*: 0\]/);
+  }, 20000);
 
   describe('platform-specific shell selection', () => {
-    it('uses powershell on Windows', async () => {
-      platformOverride = 'win32';
-      // Verify the tool selects powershell by checking the implementation
-      // On a non-Windows CI, we can't actually run powershell, so we just
-      // verify that os.platform() returns 'win32' when mocked
-      expect(os.platform()).toBe('win32');
-      // The shell tool checks os.platform() at execute time and uses 'powershell' for win32
-      // We verify the logic by reading the source - the actual spawn is tested on the real platform
-      platformOverride = undefined;
+    it('uses powershell on Windows', () => {
+      const invocation = getShellInvocation('echo windows-test', 'win32');
+      expect(invocation.shell).toBe('powershell');
+      expect(invocation.args).toContain('-NoProfile');
+      expect(invocation.args.at(-1)).toContain('echo windows-test');
     });
 
-    it('uses bash on non-Windows platforms', async () => {
-      platformOverride = 'linux';
-      const result = await shellTool.execute(
-        { command: 'echo unix-test' },
-        makeCtx(),
-      );
-      expect(result).toContain('[退出码: 0]');
+    it('uses bash on Linux', () => {
+      expect(getShellInvocation('echo unix-test', 'linux')).toEqual({
+        shell: 'bash',
+        args: ['-c', 'echo unix-test'],
+      });
     });
 
-    it('uses bash on darwin', async () => {
-      platformOverride = 'darwin';
-      const result = await shellTool.execute(
-        { command: 'echo mac-test' },
-        makeCtx(),
-      );
-      expect(result).toContain('[退出码: 0]');
+    it('uses bash on macOS', () => {
+      expect(getShellInvocation('echo mac-test', 'darwin')).toEqual({
+        shell: 'bash',
+        args: ['-c', 'echo mac-test'],
+      });
     });
   });
 

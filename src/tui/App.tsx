@@ -37,6 +37,7 @@ import { loadSkills, findSkillByTrigger } from '../skills/loader.js';
 import { getGitInfo } from '../utils/git.js';
 import { detectProject } from '../utils/project.js';
 import { CommandHistory } from '../utils/history.js';
+import { getMimoPath } from '../utils/paths.js';
 import { notifyComplete } from '../utils/notify.js';
 import { calculateCost, logCost } from '../utils/cost.js';
 import { MemoryStore } from '../utils/memory.js';
@@ -68,6 +69,7 @@ interface AppState {
   config: Config;
   needsSetup: boolean;
   initialPrompt?: string;
+  version?: string;
 }
 
 type Overlay = 'none' | 'command_palette' | 'session_picker' | 'help' | 'setup';
@@ -77,7 +79,7 @@ const EMPTY_USAGE: TokenUsage = {
   cacheHitTokens: 0, cacheMissTokens: 0,
 };
 
-export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, initialPrompt }) => {
+export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, initialPrompt, version }) => {
   const { exit } = useApp();
   const [config, setConfig] = useState(initialConfig);
   const [theme] = useState<Theme>(getTheme(initialConfig.ui.theme));
@@ -198,7 +200,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
     const candidates = [
       path.join(process.cwd(), '.mimo', 'system.md'),
       path.join(process.cwd(), '.mimo', 'prompts', 'system.md'),
-      path.join(process.env.HOME || process.env.USERPROFILE || '', '.mimo', 'system.md'),
+      getMimoPath('system.md'),
     ];
     for (const p of candidates) {
       try {
@@ -895,6 +897,7 @@ export const App: React.FC<AppState> = ({ config: initialConfig, needsSetup, ini
           <ChatView
             messages={messages}
             theme={theme}
+            version={version}
             streamingContent={streamingContent}
             streamingThinking={streamingThinking}
             streamingToolCalls={streamingToolCalls}

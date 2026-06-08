@@ -38,7 +38,7 @@ export const webFetchTool: Tool = {
     try {
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'mimo-tui/1.0',
+          'User-Agent': 'mimo-ai-cli/1.3.1',
         },
         signal: AbortSignal.timeout(30000),
       });

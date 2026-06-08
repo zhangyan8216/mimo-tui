@@ -87,7 +87,7 @@ if (args.help) {
 
 // Version
 if (args.version) {
-  console.log(`mimo-tui v${APP_VERSION}`);
+  console.log(`mimo-ai-cli v${APP_VERSION}`);
   process.exit(0);
 }
 
@@ -114,7 +114,7 @@ const prompt = args._.join(' ').trim();
 
 // Render TUI
 const { waitUntilExit } = render(
-  <App config={config} needsSetup={needsSetup} initialPrompt={prompt || undefined} />
+  <App config={config} needsSetup={needsSetup} initialPrompt={prompt || undefined} version={APP_VERSION} />
 );
 
 // Cleanup on exit

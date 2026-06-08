@@ -1,17 +1,17 @@
 # Getting Started
 
-This guide walks you through installing Mimo TUI, configuring your API key, and running your first session.
+This guide walks you through installing Mimo TUI, configuring your API key, and running your first session. The npm package is `mimo-ai-cli` and it installs the `mimo` command.
 
 ## Prerequisites
 
-- **Node.js** 18 or later
+- **Node.js** 20 or later
 - **npm** 9 or later
 - An API key for your chosen provider (see [Providers](providers.md))
 
 ## Installation
 
 ```bash
-npm install -g mimo-tui
+npm install -g mimo-ai-cli
 ```
 
 After installation the `mimo` command is available globally.
@@ -73,7 +73,7 @@ Tools are invoked automatically by the AI when it needs to interact with your co
 | `Ctrl+N` | New session | `Ctrl+L` | Clear screen |
 | `Ctrl+Z` | Undo | `Ctrl+C` | Cancel / Exit |
 | `Alt+1` | Plan mode | `Alt+2` | Agent mode |
-| `Alt+3` | YOLO mode | `?` | Help |
+| `Alt+3` | YOLO mode | `Ctrl+/` | Help |
 
 ### Agent modes
 

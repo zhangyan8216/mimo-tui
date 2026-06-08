@@ -24,8 +24,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mimo-tui
-          path: mimo-tui-*.tgz
+          name: mimo-ai-cli
+          path: mimo-ai-cli-*.tgz
 
   release:
     needs: build
@@ -37,11 +37,11 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: mimo-tui
+          name: mimo-ai-cli
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: mimo-tui-*.tgz
+          files: mimo-ai-cli-*.tgz
 
   publish:
     needs: build
@@ -56,7 +56,15 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
+      - name: Check npm token
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN is required to publish mimo-ai-cli."
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish to npm
-        run: npm publish || echo "npm publish failed (NPM_TOKEN not configured)"
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

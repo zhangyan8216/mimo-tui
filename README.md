@@ -1,6 +1,6 @@
 # Mimo TUI
 
-Terminal AI coding agent powered by Xiaomi MiMo. A full-screen TUI (Terminal User Interface) that connects to AI models through an Anthropic-compatible API for interactive code editing, tool use, and agentic workflows.
+Terminal AI coding agent powered by Xiaomi MiMo. The npm package is `mimo-ai-cli` and it installs the `mimo` command, a full-screen TUI (Terminal User Interface) for interactive code editing, tool use, and agentic workflows.
 
 ## Features
 
@@ -22,7 +22,7 @@ Terminal AI coding agent powered by Xiaomi MiMo. A full-screen TUI (Terminal Use
 
 ```bash
 # Install globally
-npm install -g mimo-tui
+npm install -g mimo-ai-cli
 
 # Run the setup wizard
 mimo --setup
@@ -34,15 +34,15 @@ mimo
 ## Installation
 
 ```bash
-npm install -g mimo-tui
+npm install -g mimo-ai-cli
 ```
 
-Requires Node.js 18 or later.
+Requires Node.js 20 or later.
 
 Alternatively, clone and build from source:
 
 ```bash
-git clone https://github.com/xiaomi/mimo-tui.git
+git clone https://github.com/zhangyan8216/mimo-tui.git
 cd mimo-tui
 npm install
 npm run build
@@ -87,6 +87,7 @@ Environment variables override config file values:
 | `MIMO_BASE_URL` | API base URL |
 | `MIMO_MODEL` | Model name |
 | `MIMO_PROVIDER_TYPE` | Provider type |
+| `MIMO_HOME` | User data directory (defaults to `~/.mimo`) |
 
 See the full [Configuration Reference](docs/configuration.md).
 
@@ -98,7 +99,7 @@ See the full [Configuration Reference](docs/configuration.md).
 | `Ctrl+N` | New session | `Ctrl+L` | Clear screen |
 | `Ctrl+Z` | Undo | `Ctrl+C` | Cancel / Exit |
 | `Alt+1` | Plan mode | `Alt+2` | Agent mode |
-| `Alt+3` | YOLO mode | `?` | Help |
+| `Alt+3` | YOLO mode | `Ctrl+/` | Help |
 
 ## Commands
 
@@ -152,7 +153,7 @@ See the full [Commands Reference](docs/commands.md).
 
 ## Tools
 
-The AI has access to 15 built-in tools:
+The AI has access to 17 built-in tools:
 
 | Tool | Description | Approval |
 |------|-------------|----------|
@@ -169,6 +170,10 @@ The AI has access to 15 built-in tools:
 | `codebase` | Codebase analysis (index, symbols, deps) | No |
 | `docker` | Docker container operations | Yes |
 | `coverage` | Test coverage reporting | Yes |
+| `database` | SQLite query and schema inspection | Yes |
+| `code_review` | Static review and improvement suggestions | No |
+| `benchmark` | Performance benchmarking helpers | No |
+| `multi_agent` | Parallel sub-agent execution | No |
 
 See the full [Tools Reference](docs/tools.md).
 
@@ -211,7 +216,7 @@ src/
       anthropic.ts       Anthropic/MiMo provider
       openai.ts          OpenAI provider
       gemini.ts          Google Gemini provider
-  tools/                 15 built-in tools
+  tools/                 17 built-in tools
   tui/                   Ink/React UI components
   agent/
     loop.ts              Agent main loop

@@ -1,15 +1,15 @@
 // src/config.ts - Configuration system
 
 import fs from 'fs';
-import path from 'path';
-import os from 'os';
 import { parse as parseToml } from 'smol-toml';
 import type { AgentMode, MCPServerConfig } from './api/types.js';
 import type { ProviderType } from './api/providers/index.js';
 import type { Locale } from './utils/i18n.js';
+import { getMimoPath, getMimoHome } from './utils/paths.js';
 
-const CONFIG_DIR = path.join(os.homedir(), '.mimo');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'config.toml');
+function getConfigFile(): string {
+  return getMimoPath('config.toml');
+}
 
 export interface Config {
   provider: {
@@ -79,9 +79,10 @@ export function loadConfig(): Config {
   };
 
   // Load from config file
-  if (fs.existsSync(CONFIG_FILE)) {
+  const configFile = getConfigFile();
+  if (fs.existsSync(configFile)) {
     try {
-      const content = fs.readFileSync(CONFIG_FILE, 'utf-8');
+      const content = fs.readFileSync(configFile, 'utf-8');
       const toml = parseToml(content);
 
       if (toml.provider) {
@@ -136,7 +137,9 @@ function escapeTomlString(s: string): string {
 }
 
 export function saveConfig(config: Config): void {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  const configDir = getMimoHome();
+  const configFile = getConfigFile();
+  fs.mkdirSync(configDir, { recursive: true });
 
   let toml = `[provider]
 api_key = "${escapeTomlString(config.provider.apiKey)}"
@@ -181,7 +184,7 @@ locale = "${config.ui.locale}"
     }
   }
 
-  fs.writeFileSync(CONFIG_FILE, toml, 'utf-8');
+  fs.writeFileSync(configFile, toml, 'utf-8');
 }
 
 /** Add an MCP server to config and save */
@@ -201,9 +204,9 @@ export function removeMcpServer(config: Config, name: string): Config {
 }
 
 export function configExists(): boolean {
-  return fs.existsSync(CONFIG_FILE);
+  return fs.existsSync(getConfigFile());
 }
 
 export function getConfigDir(): string {
-  return CONFIG_DIR;
+  return getMimoHome();
 }

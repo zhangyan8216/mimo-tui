@@ -3,6 +3,7 @@
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { getMimoHome } from './paths.js';
 
 export class Sandbox {
   private allowedRoots: string[];
@@ -11,7 +12,7 @@ export class Sandbox {
   constructor(projectRoot: string) {
     this.allowedRoots = [
       path.resolve(projectRoot),
-      path.join(os.homedir(), '.mimo'),
+      getMimoHome(),
     ];
     this.blockedPaths = [
       '/etc', '/sys', '/proc', '/dev',

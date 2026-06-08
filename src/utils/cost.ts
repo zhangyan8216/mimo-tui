@@ -1,10 +1,12 @@
-// src/utils/cost.ts - 成本追踪和告警
+// src/utils/cost.ts - Cost tracking and summaries.
 
-import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { getMimoPath } from './paths.js';
 
-const COST_LOG = path.join(os.homedir(), '.mimo', 'cost.json');
+function getCostLog(): string {
+  return getMimoPath('cost.json');
+}
 
 export interface CostRecord {
   date: string;
@@ -24,7 +26,6 @@ export interface CostSummary {
   recordCount: number;
 }
 
-// MiMo v2.5 Pro 定价 (每百万 token)
 const PRICING: Record<string, { input: number; output: number; cacheHit: number }> = {
   'mimo-v2.5-pro': { input: 0.435, output: 0.87, cacheHit: 0.003625 },
   'mimo-v2.5-flash': { input: 0.14, output: 0.28, cacheHit: 0.0028 },
@@ -44,26 +45,27 @@ export function calculateCost(
   return inputCost + cacheCost + outputCost;
 }
 
+function readRecords(): CostRecord[] {
+  const costLog = getCostLog();
+  if (!fs.existsSync(costLog)) return [];
+  const parsed = JSON.parse(fs.readFileSync(costLog, 'utf-8'));
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 export function logCost(record: CostRecord): void {
+  const costLog = getCostLog();
   try {
-    let records: CostRecord[] = [];
-    if (fs.existsSync(COST_LOG)) {
-      const parsed = JSON.parse(fs.readFileSync(COST_LOG, 'utf-8'));
-      records = Array.isArray(parsed) ? parsed : [];
-    }
+    let records = readRecords();
     records.push(record);
-    // 只保留最近 1000 条
     if (records.length > 1000) records = records.slice(-1000);
-    fs.mkdirSync(path.dirname(COST_LOG), { recursive: true });
-    fs.writeFileSync(COST_LOG, JSON.stringify(records, null, 2), 'utf-8');
+    fs.mkdirSync(path.dirname(costLog), { recursive: true });
+    fs.writeFileSync(costLog, JSON.stringify(records, null, 2), 'utf-8');
   } catch { /* ignore */ }
 }
 
 export function getCostSummary(): CostSummary {
   try {
-    if (!fs.existsSync(COST_LOG)) return { today: 0, thisWeek: 0, thisMonth: 0, total: 0, recordCount: 0 };
-
-    const records: CostRecord[] = JSON.parse(fs.readFileSync(COST_LOG, 'utf-8'));
+    const records = readRecords();
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
